@@ -6,13 +6,24 @@ const PORT = 3000;
 const OPENCLAW_RUNTIME_URL = process.env.OPENCLAW_RUNTIME_URL || "http://openclaw:18789/tools/invoke";
 const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 const OPENCLAW_TELEGRAM_CHAT_ID = process.env.OPENCLAW_TELEGRAM_CHAT_ID || "";
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "";
 const OPENCLAW_B2_TEST_MESSAGE = process.env.OPENCLAW_B2_TEST_MESSAGE || "[B2 TEST] POST -> bridge -> openclaw -> Telegram";
 const AI_ENABLED = String(process.env.AI_ENABLED || "false").toLowerCase() === "true";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const AI_MODEL = process.env.AI_MODEL || "gpt-4o-mini";
 const AI_TIMEOUT_MS = Number.parseInt(process.env.AI_TIMEOUT_MS || "8000", 10);
 const RESOLVED_AI_TIMEOUT_MS = Number.isFinite(AI_TIMEOUT_MS) && AI_TIMEOUT_MS > 0 ? AI_TIMEOUT_MS : 8000;
+const HEARTBEAT_INTERVAL_MS_RAW = Number.parseInt(process.env.HEARTBEAT_INTERVAL_MS || "", 10);
+const HEARTBEAT_INTERVAL_MS = Number.isFinite(HEARTBEAT_INTERVAL_MS_RAW) && HEARTBEAT_INTERVAL_MS_RAW > 0
+  ? HEARTBEAT_INTERVAL_MS_RAW
+  : 60 * 60 * 1000;
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+const metrics = {
+  llm_success_count: 0,
+  llm_fallback_count: 0,
+  last_latency: null,
+  current_volatility_state: "UNKNOWN"
+};
 
 app.use(express.json());
 
@@ -149,6 +160,98 @@ const generateMessageWithLlm = async (context, state) => {
   }
 };
 
+const sendTelegramMessage = async (targetChatId, message) => {
+  if (!OPENCLAW_GATEWAY_TOKEN || !targetChatId) {
+    throw new Error("missing OPENCLAW_GATEWAY_TOKEN or target chat id");
+  }
+
+  const runtimeResponse = await fetch(OPENCLAW_RUNTIME_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      tool: "message",
+      action: "send",
+      sessionKey: "main",
+      args: {
+        channel: "telegram",
+        target: targetChatId,
+        message
+      }
+    })
+  });
+
+  const runtimeBody = await runtimeResponse.json().catch(() => ({}));
+  if (!runtimeResponse.ok || runtimeBody.ok !== true) {
+    const details = {
+      status: runtimeResponse.status,
+      body: runtimeBody
+    };
+    const error = new Error("openclaw send failed");
+    error.details = details;
+    throw error;
+  }
+
+  return runtimeBody;
+};
+
+const buildHeartbeatMessage = () => {
+  const nowUtc = new Date();
+  const formattedTime = nowUtc.toISOString().slice(11, 16);
+  const aiModeLabel = AI_ENABLED ? `ON (${AI_MODEL})` : "OFF (template mode)";
+  const latencyLabel = Number.isFinite(metrics.last_latency)
+    ? `${(metrics.last_latency / 1000).toFixed(1)}s`
+    : "n/a";
+  const volatilityLabel =
+    metrics.current_volatility_state === "RED"
+      ? "🔴 RED (High Impact Active)"
+      : metrics.current_volatility_state === "GREEN"
+        ? "🟢 GREEN (No Active Events)"
+        : "Not initialized yet";
+
+  const lines = [
+    "🫀 System Heartbeat",
+    "",
+    `🧠 AI Mode: ${aiModeLabel}`,
+    `⚡ LLM Calls: ${metrics.llm_success_count} success / ${metrics.llm_fallback_count} fallback (last hour)`,
+    `⏱ Last Latency: ${latencyLabel}`,
+    `📊 Volatility State: ${volatilityLabel}`,
+    `🕒 Time: ${formattedTime} UTC`
+  ];
+
+  if (metrics.llm_fallback_count > 0) {
+    lines.push("⚠️ Fallbacks detected");
+  }
+
+  return lines.join("\n");
+};
+
+const sendHeartbeat = async (source = "interval") => {
+  if (!ADMIN_CHAT_ID) {
+    console.warn("[bridge:heartbeat:skip] missing ADMIN_CHAT_ID");
+    return { ok: false, reason: "missing_admin_chat_id" };
+  }
+
+  const runtimeBody = await sendTelegramMessage(ADMIN_CHAT_ID, buildHeartbeatMessage());
+  metrics.llm_fallback_count = 0;
+  console.log("[bridge:heartbeat:sent]", JSON.stringify({
+    source,
+    target: ADMIN_CHAT_ID,
+    timestamp: new Date().toISOString()
+  }));
+  return runtimeBody;
+};
+
+setInterval(async () => {
+  try {
+    await sendHeartbeat("interval");
+  } catch (error) {
+    console.error("[bridge:heartbeat:error]", error && error.details ? JSON.stringify(error.details, null, 2) : error);
+  }
+}, HEARTBEAT_INTERVAL_MS);
+
 app.post("/hooks/event", async (req, res) => {
   const incomingEventType = req.body && req.body.event_type;
   const incomingState = req.body && req.body.state;
@@ -160,10 +263,20 @@ app.post("/hooks/event", async (req, res) => {
   let llmLog = null;
 
   if (isVolatilityStateChanged) {
+    metrics.current_volatility_state = incomingState;
     if (AI_ENABLED) {
       const llmResult = await generateMessageWithLlm(incomingContext, incomingState);
       telegramMessage = llmResult.telegramMessage;
       llmLog = llmResult.llm;
+      if (llmLog && Number.isFinite(llmLog.latency_ms)) {
+        metrics.last_latency = llmLog.latency_ms;
+      }
+      if (llmLog && llmLog.success === true) {
+        metrics.llm_success_count += 1;
+      }
+      if (llmLog && llmLog.fallback === true) {
+        metrics.llm_fallback_count += 1;
+      }
     } else {
       telegramMessage = generateMessageWithTemplate(incomingState, incomingContext);
     }
@@ -189,36 +302,7 @@ app.post("/hooks/event", async (req, res) => {
   }
 
   try {
-    const runtimeResponse = await fetch(OPENCLAW_RUNTIME_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        tool: "message",
-        action: "send",
-        sessionKey: "main",
-        args: {
-          channel: "telegram",
-          target: OPENCLAW_TELEGRAM_CHAT_ID,
-          message: telegramMessage
-        }
-      })
-    });
-
-    const runtimeBody = await runtimeResponse.json().catch(() => ({}));
-    if (!runtimeResponse.ok || runtimeBody.ok !== true) {
-      console.error("[bridge:openclaw:error]", JSON.stringify({
-        status: runtimeResponse.status,
-        body: runtimeBody
-      }, null, 2));
-      return res.status(502).json({
-        status: "error",
-        bridge: "received",
-        openclaw: runtimeBody
-      });
-    }
+    const runtimeBody = await sendTelegramMessage(OPENCLAW_TELEGRAM_CHAT_ID, telegramMessage);
 
     return res.json({
       status: "ok",
@@ -226,7 +310,7 @@ app.post("/hooks/event", async (req, res) => {
       openclaw: runtimeBody.result && runtimeBody.result.details ? runtimeBody.result.details : runtimeBody
     });
   } catch (error) {
-    console.error("[bridge:openclaw:exception]", error);
+    console.error("[bridge:openclaw:exception]", error && error.details ? JSON.stringify(error.details, null, 2) : error);
     return res.status(502).json({
       status: "error",
       bridge: "received",

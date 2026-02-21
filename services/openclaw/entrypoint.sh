@@ -26,4 +26,15 @@ EOF
   chmod 600 "${TELEGRAM_PROFILE_PATH}"
 fi
 
+if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+  if ! printf "%s" "${OPENAI_API_KEY}" | openclaw --profile "${PROFILE_NAME}" models auth paste-token --provider openai >/dev/null; then
+    echo "WARN: failed to configure OpenAI auth profile" >&2
+  fi
+fi
+
+DEFAULT_MODEL="${OPENCLAW_DEFAULT_MODEL:-openai/gpt-4o-mini}"
+if ! openclaw --profile "${PROFILE_NAME}" models set "${DEFAULT_MODEL}" >/dev/null; then
+  echo "WARN: failed to set default model '${DEFAULT_MODEL}'" >&2
+fi
+
 exec openclaw --profile "${PROFILE_NAME}" gateway --bind "${GATEWAY_BIND}" --token "${GATEWAY_TOKEN}" --force
