@@ -1,0 +1,6 @@
+node_modules
+data/
+logs/
+.env
+# n8n volume data
+n8n_data/

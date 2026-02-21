@@ -1,0 +1,87 @@
+[
+  {
+    "name": "Volatility State from Forex Factory",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "triggerTimes": {
+            "item": [
+              {
+                "mode": "everyX",
+                "value": 15,
+                "unit": "minutes"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.cron",
+        "typeVersion": 1,
+        "position": [
+          0,
+          0
+        ],
+        "id": "0ec07dd3-57be-4bee-a778-46f0f23cdf11",
+        "name": "Cron"
+      },
+      {
+        "parameters": {
+          "jsCode": "const preWindowMs = 30 * 60 * 1000;\nconst postWindowMs = 15 * 60 * 1000;\nconst timeoutMs = 10 * 1000;\nconst url = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';\n\nconst nowMs = Date.now();\nconst nowUtc = new Date(nowMs).toISOString();\n\nconst staticData = $getWorkflowStaticData('global');\nconst currentState = staticData.current_state || 'GREEN';\n\nconst log = (payload) => {\n  console.log(JSON.stringify({\n    workflow: 'volatility-state',\n    ...payload\n  }));\n};\n\nconst isValidEvent = (event) => {\n  return Boolean(\n    event &&\n    typeof event === 'object' &&\n    typeof event.date === 'string' &&\n    typeof event.impact === 'string' &&\n    typeof event.title === 'string'\n  );\n};\n\ntry {\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), timeoutMs);\n\n  let response;\n  try {\n    response = await fetch(url, {\n      method: 'GET',\n      signal: controller.signal,\n      headers: {\n        Accept: 'application/json'\n      }\n    });\n  } finally {\n    clearTimeout(timer);\n  }\n\n  if (!response.ok) {\n    log({\n      now_utc: nowUtc,\n      current_state: currentState,\n      state_changed: false,\n      error: `http_status_${response.status}`\n    });\n    return [];\n  }\n\n  let payload;\n  try {\n    payload = await response.json();\n  } catch (error) {\n    log({\n      now_utc: nowUtc,\n      current_state: currentState,\n      state_changed: false,\n      error: `invalid_json_parse:${error.message}`\n    });\n    return [];\n  }\n\n  if (!Array.isArray(payload)) {\n    log({\n      now_utc: nowUtc,\n      current_state: currentState,\n      state_changed: false,\n      error: 'invalid_json_shape:not_array'\n    });\n    return [];\n  }\n\n  const invalidItemIndex = payload.findIndex((event) => !isValidEvent(event));\n  if (invalidItemIndex !== -1) {\n    log({\n      now_utc: nowUtc,\n      current_state: currentState,\n      state_changed: false,\n      error: `invalid_json_shape:item_${invalidItemIndex}`\n    });\n    return [];\n  }\n\n  const highEvents = payload.filter((event) => event.impact === 'High');\n\n  let newState = 'GREEN';\n  for (const event of highEvents) {\n    const eventMs = Date.parse(event.date);\n    if (Number.isNaN(eventMs)) {\n      continue;\n    }\n\n    if (eventMs - preWindowMs <= nowMs && nowMs <= eventMs + postWindowMs) {\n      newState = 'RED';\n      break;\n    }\n  }\n\n  const stateChanged = newState !== currentState;\n\n  log({\n    now_utc: nowUtc,\n    high_events_count: highEvents.length,\n    new_state: newState,\n    current_state: currentState,\n    state_changed: stateChanged\n  });\n\n  if (!stateChanged) {\n    return [];\n  }\n\n  staticData.current_state = newState;\n\n  return [\n    {\n      json: {\n        event_type: 'volatility.state_changed',\n        state: newState,\n        timestamp: nowUtc\n      }\n    }\n  ];\n} catch (error) {\n  const errorText = error && error.name === 'AbortError'\n    ? `timeout_${timeoutMs}ms`\n    : `request_failed:${error.message}`;\n\n  log({\n    now_utc: nowUtc,\n    current_state: currentState,\n    state_changed: false,\n    error: errorText\n  });\n\n  return [];\n}"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          260,
+          0
+        ],
+        "id": "9a7fe22b-2515-44ff-a0e0-6119e299f492",
+        "name": "Compute Volatility State"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://bridge:3000/hooks/event",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { \"event_type\": $json.event_type, \"state\": $json.state, \"timestamp\": $json.timestamp } }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          520,
+          0
+        ],
+        "id": "480f5790-24d3-4d0d-8e45-2b6fb1dbc8c9",
+        "name": "Send to Bridge"
+      }
+    ],
+    "connections": {
+      "Cron": {
+        "main": [
+          [
+            {
+              "node": "Compute Volatility State",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Compute Volatility State": {
+        "main": [
+          [
+            {
+              "node": "Send to Bridge",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    }
+  }
+]

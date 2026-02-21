@@ -1,0 +1,58 @@
+services:
+  bridge:
+    container_name: bridge
+    build: ./services/bridge
+    environment:
+      - OPENCLAW_RUNTIME_URL=http://openclaw:18789/tools/invoke
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-bridge-runtime-token}
+      - OPENCLAW_TELEGRAM_CHAT_ID=${OPENCLAW_TELEGRAM_CHAT_ID:-}
+      - OPENCLAW_B2_TEST_MESSAGE=[B2 TEST] POST -> bridge -> openclaw -> Telegram
+    expose:
+      - "3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - trade-network
+  n8n:
+    container_name: n8n
+    image: n8nio/n8n:latest
+    environment:
+      - N8N_HOST=n8n
+      - N8N_PORT=5678
+      - GENERIC_TIMEZONE=UTC
+      - N8N_SECURE_COOKIE=false
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+    networks:
+      - trade-network
+  openclaw:
+    build: ./services/openclaw
+    expose:
+      - "18789"
+    environment:
+      - OPENCLAW_PROFILE=n8n
+      - OPENCLAW_GATEWAY_BIND=lan
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-bridge-runtime-token}
+      - OPENCLAW_TELEGRAM_BOT_TOKEN=${OPENCLAW_TELEGRAM_BOT_TOKEN:-}
+      - OPENCLAW_TELEGRAM_CHAT_ID=${OPENCLAW_TELEGRAM_CHAT_ID:-}
+    volumes:
+      - openclaw_n8n_profile:/root/.openclaw-n8n
+    restart: unless-stopped
+    networks:
+      - trade-network
+
+networks:
+  trade-network:
+    driver: bridge
+
+volumes:
+  n8n_data:
+  openclaw_n8n_profile:
