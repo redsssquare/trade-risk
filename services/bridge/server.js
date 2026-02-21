@@ -6,6 +6,7 @@ const OPENCLAW_RUNTIME_URL = process.env.OPENCLAW_RUNTIME_URL || "http://opencla
 const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 const OPENCLAW_TELEGRAM_CHAT_ID = process.env.OPENCLAW_TELEGRAM_CHAT_ID || "";
 const OPENCLAW_B2_TEST_MESSAGE = process.env.OPENCLAW_B2_TEST_MESSAGE || "[B2 TEST] POST -> bridge -> openclaw -> Telegram";
+const AI_ENABLED = String(process.env.AI_ENABLED || "false").toLowerCase() === "true";
 
 app.use(express.json());
 
@@ -13,19 +14,51 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+const generateMessageWithTemplate = (state, context) => {
+  if (state === "GREEN") {
+    return "🟢 Volatility Window Closed\n\nNo high-impact events active.";
+  }
+
+  const safeContext = context && typeof context === "object" ? context : {};
+  const eventTitle = safeContext.event_title || "N/A";
+  const currency = safeContext.currency || "N/A";
+  const eventTime = safeContext.event_time || "N/A";
+  const minutesToEvent = Number.isFinite(safeContext.minutes_to_event) ? safeContext.minutes_to_event : 0;
+
+  return [
+    "🔴 High Impact Event Incoming",
+    "",
+    `${eventTitle}`,
+    `Currency: ${currency}`,
+    `Time: ${eventTime} UTC`,
+    `In: ${minutesToEvent} minutes`
+  ].join("\n");
+};
+
+const generateMessageWithLlm = (context, state) => {
+  // AI-ready placeholder: currently no external model call.
+  return generateMessageWithTemplate(state, context);
+};
+
 app.post("/hooks/event", (req, res) => {
   const incomingEventType = req.body && req.body.event_type;
   const incomingState = req.body && req.body.state;
+  const incomingContext = req.body && req.body.context;
   const isVolatilityStateChanged =
     incomingEventType === "volatility.state_changed" &&
     (incomingState === "RED" || incomingState === "GREEN");
-  const telegramMessage = isVolatilityStateChanged ? incomingState : OPENCLAW_B2_TEST_MESSAGE;
+  const telegramMessage = isVolatilityStateChanged
+    ? (AI_ENABLED
+      ? generateMessageWithLlm(incomingContext, incomingState)
+      : generateMessageWithTemplate(incomingState, incomingContext))
+    : OPENCLAW_B2_TEST_MESSAGE;
 
   const logPayload = {
     timestamp: new Date().toISOString(),
     method: req.method,
     path: req.path,
     body: req.body,
+    ai_enabled: AI_ENABLED,
     telegramMessage
   };
 
