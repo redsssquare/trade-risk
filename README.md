@@ -26,6 +26,8 @@
 - Скрипты деплоя:
   - `scripts/push-volatility-workflow.js`
   - `scripts/activate-volatility-workflow.js`
+  - `scripts/deploy-smoke-volatility-workflow.js` (one-click: push + авто-smoke по ближайшему execution)
+- **MCP для n8n:** чтобы агенты могли управлять/читать workflow через MCP — [настройка в docs/mcp-n8n-setup.md](docs/mcp-n8n-setup.md).
 
 ## 3) Текущие бизнес-правила MVP
 
