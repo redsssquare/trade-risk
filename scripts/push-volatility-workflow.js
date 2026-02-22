@@ -38,7 +38,7 @@ function loadEnv() {
 async function main() {
   const env = loadEnv();
   const apiKey = env.N8N_API_KEY || process.env.N8N_API_KEY;
-  const baseUrl = (env.N8N_BASE_URL || process.env.N8N_BASE_URL || "http://localhost:5678").replace(/\/$/, "");
+  const baseUrl = (process.env.N8N_BASE_URL || env.N8N_BASE_URL || "http://localhost:5678").replace(/\/$/, "");
 
   if (!apiKey) {
     console.error("N8N_API_KEY is not set. Add it to .env (n8n: Settings → API).");

@@ -11,7 +11,7 @@
 - Этап 1: завершён.
 - Этап 2: завершён.
 - Этап 2.5: завершён (декомпозиция Compute на логические блоки).
-- Следующий этап: Этап 3 (модуль «пачка новостей» / cluster без anchor).
+- Этап 3: завершён (модуль «пачка новостей» / cluster без anchor).
 
 ## 1) Текущий рабочий контур
 
@@ -37,18 +37,22 @@
   - `scripts/push-volatility-workflow.js`
   - `scripts/activate-volatility-workflow.js`
   - `scripts/deploy-smoke-volatility-workflow.js` (one-click: push + авто-smoke по ближайшему execution)
+- Smoke для cluster (Этап 3):
+  - `scripts/stage3-cluster-smoke.sh` — подготовка теста: 3 близких High-события, rebuild bridge, push workflow, активация (источник: только n8n, bridge cron отключён).
+  - `scripts/stage3-cluster-smoke-restore.sh` — откат: восстановить `simulated_day.json`, вернуть `CALENDAR_TEST_MODE=false`, `BRIDGE_CRON_INTERVAL_MS=30000`.
 - **MCP для n8n:** чтобы агенты могли управлять/читать workflow через MCP — [настройка в docs/mcp-n8n-setup.md](docs/mcp-n8n-setup.md).
 
 ## 3) Текущие бизнес-правила MVP
 
+- **Кластеризация (Этап 3):** события High в пределах `CLUSTER_WINDOW_MIN` (5 мин) объединяются в один кластер. Уведомление — одно на серию, а не на каждое событие. В `context` добавляются `cluster_size`, `cluster_events`, `cluster_window_min` (опционально).
 - Фазы:
-  - `pre_event`: 20 минут до события (не раньше)
-  - `during_event`: 5 минут
-  - `post_event`: 15 минут
+  - `pre_event`: 7 минут до первого события кластера
+  - `during_event`: от начала кластера до конца последнего события + 4 мин
+  - `post_event`: 5 мин после during
 - Отправка в Telegram: только при смене состояния/фазы (плюс bootstrap при первом прогоне, если включен в workflow staticData).
 - Тестовый фид:
   - `CALENDAR_TEST_MODE=true` -> bridge читает `data/simulated_day.json`.
-- **Bridge internal cron:** `BRIDGE_CRON_INTERVAL_MS=30000` (по умолчанию) — Bridge сам проверяет каждые 30 с. Для production с полными окнами можно `BRIDGE_CRON_INTERVAL_MS=60000`. `BRIDGE_CRON_INTERVAL_MS=0` — отключить (только n8n).
+- **Bridge internal cron:** `BRIDGE_CRON_INTERVAL_MS=30000` (по умолчанию) — Bridge сам проверяет каждые 30 с. Для production с полными окнами можно `BRIDGE_CRON_INTERVAL_MS=60000`. `BRIDGE_CRON_INTERVAL_MS=0` — отключить (только n8n). При smoke-тесте cluster используется `0`, чтобы избежать дубликатов с n8n.
 
 ## 4) Жесткие правила для агентов
 
@@ -68,7 +72,7 @@
 
 Кратко:
 - **Вход Feed:** `items[]` с полями `title`, `date`, `impact` (Compute фильтрует по `impact === "High"`).
-- **Выход Compute / вход Bridge:** `event_type`, `state`, `phase`, `timestamp`, `context`.
+- **Выход Compute / вход Bridge:** `event_type`, `state`, `phase`, `timestamp`, `context` (опционально в `context`: `cluster_size`, `cluster_events`, `cluster_window_min`).
 
 ## 6) Что нельзя ломать (и нельзя менять без согласования)
 

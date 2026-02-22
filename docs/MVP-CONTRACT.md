@@ -95,6 +95,9 @@ Compute (n8n code node или `lib/volatility-compute.js`) передаёт ре
 | `contextual_anchor` | boolean | нет | Есть anchor-события в окне, но не primary |
 | `contextual_anchor_names` | string[] | нет | Список имён anchor-событий |
 | `primary_event` | object | нет | `{ name, time }` — primary событие |
+| `cluster_size` | number | нет | Размер серии публикаций (кол-во событий в кластере) |
+| `cluster_events` | object[] | нет | Список событий серии: минимум `{ name, time, impact }` |
+| `cluster_window_min` | number | нет | Размер окна (в минутах), использованный для группировки |
 
 ### Дополнительные поля (опционально, для логирования/simulation)
 
@@ -156,6 +159,7 @@ Compute (n8n code node или `lib/volatility-compute.js`) передаёт ре
 | `impact_type` | Шаблоны сообщений (anchor_high vs high) |
 | `contextual_anchor`, `contextual_anchor_names` | Упоминание anchor-событий в LLM |
 | `primary_event` | Резерв для генерации текста |
+| `cluster_size`, `cluster_events`, `cluster_window_min` | Признак серии публикаций для LLM/логики уведомлений |
 
 ---
 

@@ -8,6 +8,13 @@
 
 ### Added
 
+- **Этап 3: Модуль «пачка новостей» (cluster)** (2026-02-22)
+  - Кластеризация близких High-событий (в пределах `CLUSTER_WINDOW_MIN=5` мин) — одно уведомление на серию вместо спама по каждому событию.
+  - В `context` добавлены опциональные поля: `cluster_size`, `cluster_events`, `cluster_window_min`.
+  - Изменения только в Compute: `lib/volatility-compute.js`, нода `Compute Volatility State` в n8n workflow. Bridge и LLM слой не менялись.
+  - Скрипты smoke: `scripts/stage3-cluster-smoke.sh` (подготовка теста с 3 близкими событиями, rebuild bridge, push workflow, активация), `scripts/stage3-cluster-smoke-restore.sh` (откат).
+  - Smoke тест использует `BRIDGE_CRON_INTERVAL_MS=0`, чтобы избежать дубликатов с n8n.
+
 - **Compute декомпозиция на подмодули** (2026-02-22)
   - Логика внутри ноды `Compute Volatility State` разделена на явные блоки: NormalizeInput, BuildActiveCandidates, ResolvePhaseAndState, DiffWithPreviousState, BuildOutputPayload.
   - При сбое в логах execution пишется `failed_block` — видно, на каком шаге произошла ошибка.
