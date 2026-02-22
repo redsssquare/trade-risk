@@ -1,0 +1,26 @@
+{
+  "anchor_high_events": [
+    {
+      "key": "fed_rate_decision",
+      "aliases": [
+        "fomc",
+        "fed rate",
+        "interest rate decision"
+      ]
+    },
+    {
+      "key": "us_cpi",
+      "aliases": [
+        "cpi",
+        "consumer price index"
+      ]
+    },
+    {
+      "key": "us_nfp",
+      "aliases": [
+        "non-farm payrolls",
+        "nfp"
+      ]
+    }
+  ]
+}

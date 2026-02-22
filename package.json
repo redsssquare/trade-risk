@@ -1,0 +1,11 @@
+{
+  "name": "trade-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:volatility": "node scripts/run-volatility-tests.js",
+    "test:volatility:docker": "docker compose run --rm -v $(pwd):/app -w /app bridge node scripts/run-volatility-tests.js",
+    "activate:volatility": "node scripts/activate-volatility-workflow.js",
+    "push:volatility": "node scripts/push-volatility-workflow.js"
+  }
+}

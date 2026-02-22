@@ -9,7 +9,7 @@
             "item": [
               {
                 "mode": "everyX",
-                "value": 15,
+                "value": 1,
                 "unit": "minutes"
               }
             ]
@@ -26,12 +26,27 @@
       },
       {
         "parameters": {
-          "jsCode": "const preWindowMs = 30 * 60 * 1000;\nconst postWindowMs = 15 * 60 * 1000;\nconst timeoutMs = 10 * 1000;\nconst url = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';\n\nconst nowMs = Date.now();\nconst nowUtc = new Date(nowMs).toISOString();\n\nconst staticData = $getWorkflowStaticData('global');\nconst currentState = staticData.current_state || 'GREEN';\n\nconst log = (payload) => {\n  console.log(JSON.stringify({\n    workflow: 'volatility-state',\n    ...payload\n  }));\n};\n\nconst isValidEvent = (event) => {\n  return Boolean(\n    event &&\n    typeof event === 'object' &&\n    typeof event.date === 'string' &&\n    typeof event.impact === 'string' &&\n    typeof event.title === 'string'\n  );\n};\n\ntry {\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), timeoutMs);\n\n  let response;\n  try {\n    response = await fetch(url, {\n      method: 'GET',\n      signal: controller.signal,\n      headers: {\n        Accept: 'application/json'\n      }\n    });\n  } finally {\n    clearTimeout(timer);\n  }\n\n  if (!response.ok) {\n    log({\n      now_utc: nowUtc,\n      current_state: currentState,\n      state_changed: false,\n      error: `http_status_${response.status}`\n    });\n    return [];\n  }\n\n  let payload;\n  try {\n    payload = await response.json();\n  } catch (error) {\n    log({\n      now_utc: nowUtc,\n      current_state: currentState,\n      state_changed: false,\n      error: `invalid_json_parse:${error.message}`\n    });\n    return [];\n  }\n\n  if (!Array.isArray(payload)) {\n    log({\n      now_utc: nowUtc,\n      current_state: currentState,\n      state_changed: false,\n      error: 'invalid_json_shape:not_array'\n    });\n    return [];\n  }\n\n  const invalidItemIndex = payload.findIndex((event) => !isValidEvent(event));\n  if (invalidItemIndex !== -1) {\n    log({\n      now_utc: nowUtc,\n      current_state: currentState,\n      state_changed: false,\n      error: `invalid_json_shape:item_${invalidItemIndex}`\n    });\n    return [];\n  }\n\n  const highEvents = payload\n    .filter((event) => event.impact === 'High')\n    .map((event) => ({\n      ...event,\n      eventMs: Date.parse(event.date)\n    }))\n    .filter((event) => !Number.isNaN(event.eventMs));\n\n  const activeHighEvents = highEvents\n    .filter((event) => event.eventMs - preWindowMs <= nowMs && nowMs <= event.eventMs + postWindowMs)\n    .sort((a, b) => a.eventMs - b.eventMs);\n\n  const newState = activeHighEvents.length > 0 ? 'RED' : 'GREEN';\n  const stateChanged = newState !== currentState;\n\n  let context = null;\n\n  if (newState === 'RED') {\n    const futureActiveEvents = activeHighEvents.filter((event) => event.eventMs >= nowMs);\n    const selectedEvent = futureActiveEvents.length > 0\n      ? futureActiveEvents[0]\n      : activeHighEvents[activeHighEvents.length - 1];\n\n    const minutesToEvent = selectedEvent.eventMs >= nowMs\n      ? Math.max(0, Math.ceil((selectedEvent.eventMs - nowMs) / 60000))\n      : 0;\n\n    context = {\n      event_title: selectedEvent.title,\n      currency: selectedEvent.currency || selectedEvent.country || 'N/A',\n      event_time: new Date(selectedEvent.eventMs).toISOString(),\n      minutes_to_event: minutesToEvent,\n      impact: selectedEvent.impact || 'High'\n    };\n  }\n\n  log({\n    now_utc: nowUtc,\n    high_events_count: highEvents.length,\n    active_high_events_count: activeHighEvents.length,\n    new_state: newState,\n    current_state: currentState,\n    state_changed: stateChanged\n  });\n\n  if (!stateChanged) {\n    return [];\n  }\n\n  staticData.current_state = newState;\n\n  return [\n    {\n      json: {\n        event_type: 'volatility.state_changed',\n        state: newState,\n        timestamp: nowUtc,\n        context\n      }\n    }\n  ];\n} catch (error) {\n  const errorText = error && error.name === 'AbortError'\n    ? `timeout_${timeoutMs}ms`\n    : `request_failed:${error.message}`;\n\n  log({\n    now_utc: nowUtc,\n    current_state: currentState,\n    state_changed: false,\n    error: errorText\n  });\n\n  return [];\n}"
+          "method": "GET",
+          "url": "http://bridge:3000/calendar-feed",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          260,
+          0
+        ],
+        "id": "11111111-2222-4333-8444-555555555555",
+        "name": "Fetch Calendar"
+      },
+      {
+        "parameters": {
+          "jsCode": "const preWindowMs = 20 * 60 * 1000;\nconst duringWindowMs = 5 * 60 * 1000;\nconst postWindowMs = 15 * 60 * 1000;\n\nconst nowMs = Date.now();\nconst nowUtc = new Date(nowMs).toISOString();\nconst staticData = $getWorkflowStaticData('global');\n\nconst log = (payload) => {\n  console.log(JSON.stringify({ workflow: 'volatility-state-mvp-cache', ...payload }));\n};\n\nconst resolvePhase = (eventMs, ts) => {\n  if (eventMs - preWindowMs <= ts && ts < eventMs) return 'pre_event';\n  if (eventMs <= ts && ts < eventMs + duringWindowMs) return 'during_event';\n  if (eventMs + duringWindowMs <= ts && ts < eventMs + postWindowMs) return 'post_event';\n  return 'none';\n};\n\nconst inputItems = $input.all();\nconst first = inputItems.length > 0 ? inputItems[0].json : null;\nconst payload = first && Array.isArray(first.items) ? first.items : [];\n\nif (!Array.isArray(payload) || payload.length === 0) {\n  log({ now_utc: nowUtc, error: 'calendar_payload_empty', feed_source: first && first.source });\n  return [];\n}\n\nconst highEvents = payload\n  .filter((e) => e && e.impact === 'High' && typeof e.title === 'string' && typeof e.date === 'string')\n  .map((e) => {\n    const eventMs = Date.parse(e.date);\n    if (Number.isNaN(eventMs)) return null;\n    return { ...e, eventMs };\n  })\n  .filter(Boolean);\n\nconst activeEvents = highEvents\n  .map((e) => ({ event: e, phase: resolvePhase(e.eventMs, nowMs) }))\n  .filter((x) => x.phase !== 'none')\n  .sort((a, b) => Math.abs(a.event.eventMs - nowMs) - Math.abs(b.event.eventMs - nowMs));\n\nconst primary = activeEvents.length > 0 ? activeEvents[0] : null;\nconst newState = primary ? 'RED' : 'GREEN';\nconst newPhase = primary ? primary.phase : 'none';\n\nconst prevState = staticData.current_state ?? null;\nconst prevPhase = staticData.current_phase ?? null;\nconst firstRun = prevState === null;\nconst bootstrapKey = 'mvp_bootstrap_sent_v2';\nconst bootstrapSend = staticData[bootstrapKey] !== true;\nconst changed = firstRun || prevState !== newState || prevPhase !== newPhase || bootstrapSend;\n\nstaticData.current_state = newState;\nstaticData.current_phase = newPhase;\nstaticData[bootstrapKey] = true;\n\nlog({\n  now_utc: nowUtc,\n  feed_source: first && first.source,\n  prev_state: prevState,\n  prev_phase: prevPhase,\n  new_state: newState,\n  new_phase: newPhase,\n  changed,\n  high_events_count: highEvents.length,\n  active_events_count: activeEvents.length\n});\n\nif (!changed) {\n  return [];\n}\n\nlet context = null;\nif (primary) {\n  const e = primary.event;\n  const minutesToEvent = e.eventMs > nowMs ? Math.max(0, Math.ceil((e.eventMs - nowMs) / 60000)) : 0;\n  context = {\n    event_name: e.title,\n    event_title: e.title,\n    event_time: new Date(e.eventMs).toISOString(),\n    minutes_to_event: minutesToEvent,\n    impact: e.impact,\n    phase: newPhase,\n    currency: e.currency || e.country || 'N/A'\n  };\n}\n\nreturn [{\n  json: {\n    event_type: 'volatility.state_changed',\n    state: newState,\n    phase: newPhase,\n    state_changed: changed,\n    timestamp: nowUtc,\n    context\n  }\n}];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          260,
+          520,
           0
         ],
         "id": "9a7fe22b-2515-44ff-a0e0-6119e299f492",
@@ -43,13 +58,13 @@
           "url": "http://bridge:3000/hooks/event",
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{ { \"event_type\": $json.event_type, \"state\": $json.state, \"timestamp\": $json.timestamp, \"context\": $json.context } }}",
+          "jsonBody": "={{ { \"event_type\": $json.event_type, \"state\": $json.state, \"phase\": $json.phase, \"timestamp\": $json.timestamp, \"context\": $json.context } }}",
           "options": {}
         },
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          520,
+          780,
           0
         ],
         "id": "480f5790-24d3-4d0d-8e45-2b6fb1dbc8c9",
@@ -58,6 +73,17 @@
     ],
     "connections": {
       "Cron": {
+        "main": [
+          [
+            {
+              "node": "Fetch Calendar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Calendar": {
         "main": [
           [
             {
