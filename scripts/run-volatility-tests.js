@@ -19,9 +19,9 @@ const { computeFromRawEvents } = require("../lib/volatility-compute.js");
 
 const DOCS_PATH = path.resolve(__dirname, "../docs/volatility_test_cases.md");
 const ANCHOR_EVENTS_PATH = path.resolve(__dirname, "../data/anchor_events.json");
-const PRE_EVENT_WINDOW_MS = 30 * 60 * 1000;
-const DURING_EVENT_WINDOW_MS = 5 * 60 * 1000;
-const POST_EVENT_WINDOW_MS = 15 * 60 * 1000;
+const PRE_EVENT_WINDOW_MS = 7 * 60 * 1000;
+const DURING_EVENT_WINDOW_MS = 4 * 60 * 1000;
+const POST_EVENT_WINDOW_MS = 9 * 60 * 1000;
 const FORBIDDEN_TELEGRAM_WORDS = [
   "рекомендуем",
   "будьте",

@@ -1,9 +1,12 @@
 services:
   bridge:
     container_name: bridge
-    build: ./services/bridge
+    build:
+      context: .
+      dockerfile: services/bridge/Dockerfile
     environment:
       - SIMULATED_DAY_PATH=/app/data/simulated_day.json
+      - ANCHOR_EVENTS_PATH=/app/data/anchor_events.json
       - SIMULATION_SPEED=${SIMULATION_SPEED:-6}
       - CALENDAR_TEST_MODE=${CALENDAR_TEST_MODE:-false}
       - OPENCLAW_RUNTIME_URL=http://openclaw:18789/tools/invoke
@@ -17,6 +20,7 @@ services:
       - AI_TIMEOUT_MS=${AI_TIMEOUT_MS:-8000}
       - HEARTBEAT_INTERVAL_MS=${HEARTBEAT_INTERVAL_MS:-}
       - SIMULATION_NOW=${SIMULATION_NOW:-}
+      - BRIDGE_CRON_INTERVAL_MS=${BRIDGE_CRON_INTERVAL_MS:-30000}
     volumes:
       - ./data:/app/data:ro
     ports:

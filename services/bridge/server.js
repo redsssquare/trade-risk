@@ -2,6 +2,7 @@ const express = require("express");
 const OpenAI = require("openai");
 const fs = require("fs");
 const path = require("path");
+const { computeFromRawEvents } = require("./lib/volatility-compute");
 
 const app = express();
 const PORT = 3000;
@@ -21,10 +22,11 @@ const HEARTBEAT_INTERVAL_MS = Number.isFinite(HEARTBEAT_INTERVAL_MS_RAW) && HEAR
   : 60 * 60 * 1000;
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const SIMULATION_NOW = process.env.SIMULATION_NOW || "";
-const ANCHOR_EVENTS_PATH = path.resolve(__dirname, "../../data/anchor_events.json");
-const PRE_EVENT_WINDOW_MS = 30 * 60 * 1000;
-const DURING_EVENT_WINDOW_MS = 5 * 60 * 1000;
-const POST_EVENT_WINDOW_MS = 15 * 60 * 1000;
+const ANCHOR_EVENTS_PATH = process.env.ANCHOR_EVENTS_PATH ||
+  (__dirname.includes("services") ? path.resolve(__dirname, "../../data/anchor_events.json") : path.resolve(__dirname, "data/anchor_events.json"));
+const PRE_EVENT_WINDOW_MS = 7 * 60 * 1000;
+const DURING_EVENT_WINDOW_MS = 4 * 60 * 1000;
+const POST_EVENT_WINDOW_MS = 9 * 60 * 1000;
 const FORBIDDEN_TELEGRAM_WORDS = [
   "рекомендуем",
   "будьте",
@@ -698,6 +700,67 @@ setInterval(async () => {
     console.error("[bridge:heartbeat:error]", error && error.details ? JSON.stringify(error.details, null, 2) : error);
   }
 }, HEARTBEAT_INTERVAL_MS);
+
+const BRIDGE_CRON_INTERVAL_MS = Number.parseInt(process.env.BRIDGE_CRON_INTERVAL_MS || "0", 10);
+const bridgeCronEnabled = Number.isFinite(BRIDGE_CRON_INTERVAL_MS) && BRIDGE_CRON_INTERVAL_MS > 0;
+
+if (bridgeCronEnabled) {
+  const runBridgeCronTick = async () => {
+    try {
+      const baseUrl = "http://127.0.0.1:3000";
+      const feedRes = await fetch(`${baseUrl}/calendar-feed`);
+      if (!feedRes.ok) return;
+      const feed = await feedRes.json();
+      const items = Array.isArray(feed.items) ? feed.items : [];
+      const nowMs = getEffectiveNowMs();
+      const result = computeFromRawEvents(nowMs, items);
+      const changed =
+        notificationState.previous_state !== result.state ||
+        notificationState.previous_phase !== result.phase;
+      if (!changed) return;
+      const context = result.state === "RED" && result.primary_event
+        ? (() => {
+            const eventMs = Date.parse(result.primary_event.time);
+            const minutesToEvent = Number.isFinite(eventMs)
+              ? (eventMs > nowMs ? Math.max(0, Math.ceil((eventMs - nowMs) / 60000)) : 0)
+              : 0;
+            return {
+              event_name: result.primary_event.name,
+              event_title: result.primary_event.name,
+              event_time: result.primary_event.time,
+              minutes_to_event: minutesToEvent,
+              impact: "High",
+              phase: result.phase,
+              impact_type: result.impact_type,
+              contextual_anchor: result.contextual_anchor,
+              contextual_anchor_names: result.contextual_anchor_names,
+              primary_event: result.primary_event
+            };
+          })()
+        : null;
+      const body = {
+        event_type: "volatility.state_changed",
+        state: result.state,
+        phase: result.phase,
+        timestamp: new Date(nowMs).toISOString(),
+        context
+      };
+      const hookRes = await fetch(`${baseUrl}/hooks/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!hookRes.ok) {
+        console.warn("[bridge:cron:hook_failed]", { status: hookRes.status });
+      }
+    } catch (err) {
+      console.warn("[bridge:cron:error]", err && err.message ? err.message : err);
+    }
+  };
+  setInterval(runBridgeCronTick, BRIDGE_CRON_INTERVAL_MS);
+  setTimeout(runBridgeCronTick, 2000);
+  console.log("[bridge:cron:started]", { interval_ms: BRIDGE_CRON_INTERVAL_MS });
+}
 
 app.post("/hooks/event", async (req, res) => {
   const incomingEventType = req.body && req.body.event_type;

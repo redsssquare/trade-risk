@@ -8,7 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const PRE_MINUTES = 20;
+const PRE_MINUTES = 7;
 const nowMs = Date.now();
 const eventMs = nowMs + PRE_MINUTES * 60 * 1000;
 
@@ -28,4 +28,4 @@ fs.writeFileSync(outPath, JSON.stringify(template, null, 2), "utf8");
 
 console.log("[update-test-event] Written:", outPath);
 console.log("[update-test-event] Event at:", template.events[0].time, "(now +", PRE_MINUTES, "min)");
-console.log("[update-test-event] Set CALENDAR_TEST_MODE=true, restart stack, activate workflow; expect pre_event → during_event → post_event over ~40 min.");
+console.log("[update-test-event] Set CALENDAR_TEST_MODE=true, restart stack, activate workflow; expect pre_event → during_event → post_event over ~14 min.");
