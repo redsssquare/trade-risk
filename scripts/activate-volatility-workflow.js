@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Активирует workflow "Volatility State from Forex Factory" в n8n через API.
+ * Активирует workflow "Volatility Window" в n8n через API.
  * Требует N8N_API_KEY в .env (создать в n8n: Settings → API).
  *
  * Использование: node scripts/activate-volatility-workflow.js
@@ -10,7 +10,8 @@
 const fs = require("fs");
 const path = require("path");
 
-const WORKFLOW_NAME = "Volatility State from Forex Factory";
+const WORKFLOW_NAME = "Volatility Window";
+const LEGACY_WORKFLOW_NAME = "Volatility State from Forex Factory";
 
 function loadEnv() {
   const envPath = path.resolve(__dirname, "..", ".env");
@@ -56,9 +57,9 @@ async function main() {
       process.exit(1);
     }
     const { data: workflows } = await listRes.json();
-    const wf = workflows.find((w) => w.name === WORKFLOW_NAME);
+    const wf = workflows.find((w) => w.name === WORKFLOW_NAME || w.name === LEGACY_WORKFLOW_NAME);
     if (!wf) {
-      console.error(`Workflow "${WORKFLOW_NAME}" not found. Import n8n-phase-b-workflow.json first.`);
+      console.error(`Workflow "${WORKFLOW_NAME}" not found. Import n8n-volatility-window-workflow.json first.`);
       process.exit(1);
     }
 

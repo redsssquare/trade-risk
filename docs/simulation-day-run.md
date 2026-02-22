@@ -27,8 +27,8 @@ docker compose restart
 ## 3. Workflow в n8n
 
 1. Открой n8n: http://localhost:5678
-2. Импортируй workflow, если ещё не импортирован: **Workflows → Import from File** → выбери `n8n-phase-b-workflow.json`
-3. Открой workflow **"Volatility State from Forex Factory"**
+2. Импортируй workflow, если ещё не импортирован: **Workflows → Import from File** → выбери `n8n-volatility-window-workflow.json`
+3. Открой workflow **"Volatility Window"**
 4. Включи его: переключатель **Active** в положение ON (workflow будет срабатывать по крону каждую минуту)
 
 После этого каждую минуту workflow считает виртуальное время, проверяет фазы (pre_event, during_event, post_event) и при смене состояния/фазы шлёт событие в bridge → в Telegram.

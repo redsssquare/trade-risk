@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Обновляет workflow "Volatility State from Forex Factory" в n8n из файла
- * n8n-phase-b-workflow.json. Сохраняет текущий статус active (вкл/выкл).
+ * Обновляет workflow "Volatility Window" в n8n из файла
+ * n8n-volatility-window-workflow.json. Сохраняет текущий статус active (вкл/выкл).
  *
  * Использование: node scripts/push-volatility-workflow.js
  * Требует N8N_API_KEY в .env.
@@ -10,8 +10,9 @@
 const fs = require("fs");
 const path = require("path");
 
-const WORKFLOW_NAME = "Volatility State from Forex Factory";
-const WORKFLOW_FILE = "n8n-phase-b-workflow.json";
+const WORKFLOW_NAME = "Volatility Window";
+const LEGACY_WORKFLOW_NAME = "Volatility State from Forex Factory";
+const WORKFLOW_FILE = "n8n-volatility-window-workflow.json";
 
 function loadEnv() {
   const envPath = path.resolve(__dirname, "..", ".env");
@@ -70,7 +71,7 @@ async function main() {
       process.exit(1);
     }
     const { data: workflows } = await listRes.json();
-    const existing = workflows.find((w) => w.name === WORKFLOW_NAME);
+    const existing = workflows.find((w) => w.name === WORKFLOW_NAME || w.name === LEGACY_WORKFLOW_NAME);
     if (!existing) {
       console.error("Workflow \"" + WORKFLOW_NAME + "\" not found in n8n. Import it first.");
       process.exit(1);

@@ -54,7 +54,7 @@
 
 ### Общая подготовка (один раз)
 
-1. Откройте workflow `Volatility State from Forex Factory` в n8n.
+1. Откройте workflow `Volatility Window` в n8n.
 2. Временно замените внутри Code node:
    - `const nowMs = Date.now();`
    - на `const nowMs = Date.parse('<TEST_NOW_ISO>');`
