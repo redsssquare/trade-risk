@@ -14,6 +14,7 @@
 - Этап 3: завершён (модуль «пачка новостей» / cluster без anchor).
 - Этап 4: завершён (модуль классификации high vs anchor_high).
 - Этап 5: завершён (render-шаблоны отдельно от вычислений).
+- Этап 6: завершён (минимальные тест-кейсы перед merge).
 
 ## 1) Текущий рабочий контур
 
@@ -92,7 +93,7 @@
 
 ## 7) Минимальная проверка после каждого шага
 
-**Контракт:** `npm run test:volatility:docker` (или `npm run test:volatility` при Node 14+) — прогон Compute по [docs/volatility_test_cases.md](docs/volatility_test_cases.md). Anchor-классификатор: `npm run test:anchor-classifier`. Render-шаблоны: `npm run test:render`. Ручная проверка: [docs/MVP-CONTRACT.md](docs/MVP-CONTRACT.md) §5 (test JSON → Compute → Bridge → telegram_text).
+**Контракт:** `npm run test:volatility:docker` (или `npm run test:volatility` при Node 14+) — прогон Compute по [docs/volatility_test_cases.md](docs/volatility_test_cases.md). Anchor-классификатор: `npm run test:anchor-classifier`. Render-шаблоны: `npm run test:render`. Stage 6 регресс: `npm run test:stage6`. Чеклист перед merge: [docs/stage6-pre-merge-checklist.md](docs/stage6-pre-merge-checklist.md). Ручная проверка: [docs/MVP-CONTRACT.md](docs/MVP-CONTRACT.md) §5 (test JSON → Compute → Bridge → telegram_text).
 
 1. Workflow активен в n8n.
 2. Последние execution успешны.

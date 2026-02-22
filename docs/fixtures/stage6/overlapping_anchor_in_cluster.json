@@ -1,0 +1,44 @@
+{
+  "scenario_id": "overlapping_anchor_in_cluster",
+  "description": "Regular high as primary with anchor inside same cluster; checks primary switch without phase transition send.",
+  "events": [
+    {
+      "title": "UK GDP q/q",
+      "date": "2026-03-03T10:10:00Z",
+      "impact": "High",
+      "currency": "GBP"
+    },
+    {
+      "title": "CPI y/y",
+      "date": "2026-03-03T10:12:00Z",
+      "impact": "High",
+      "currency": "USD"
+    }
+  ],
+  "steps": [
+    {
+      "now": "2026-03-03T10:05:00Z",
+      "expected": { "state": "RED", "phase": "pre_event", "event_name": "UK GDP q/q", "send": true }
+    },
+    {
+      "now": "2026-03-03T10:06:00Z",
+      "expected": { "state": "RED", "phase": "pre_event", "event_name": "UK GDP q/q", "send": false }
+    },
+    {
+      "now": "2026-03-03T10:11:00Z",
+      "expected": { "state": "RED", "phase": "during_event", "event_name": "UK GDP q/q", "send": true }
+    },
+    {
+      "now": "2026-03-03T10:12:00Z",
+      "expected": { "state": "RED", "phase": "during_event", "event_name": "CPI y/y", "send": false }
+    },
+    {
+      "now": "2026-03-03T10:16:00Z",
+      "expected": { "state": "RED", "phase": "post_event", "event_name": "CPI y/y", "send": true }
+    },
+    {
+      "now": "2026-03-03T10:21:00Z",
+      "expected": { "state": "GREEN", "phase": "none", "event_name": null, "send": true }
+    }
+  ]
+}

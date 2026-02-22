@@ -1,0 +1,34 @@
+{
+  "scenario_id": "anchor_primary",
+  "description": "Single anchor_high event to validate anchor primary phases and duplicate no-send behavior.",
+  "events": [
+    {
+      "title": "FOMC Rate Decision",
+      "date": "2026-03-03T14:00:00Z",
+      "impact": "High",
+      "currency": "USD"
+    }
+  ],
+  "steps": [
+    {
+      "now": "2026-03-03T13:55:00Z",
+      "expected": { "state": "RED", "phase": "pre_event", "event_name": "FOMC Rate Decision", "send": true }
+    },
+    {
+      "now": "2026-03-03T13:56:00Z",
+      "expected": { "state": "RED", "phase": "pre_event", "event_name": "FOMC Rate Decision", "send": false }
+    },
+    {
+      "now": "2026-03-03T14:02:00Z",
+      "expected": { "state": "RED", "phase": "during_event", "event_name": "FOMC Rate Decision", "send": true }
+    },
+    {
+      "now": "2026-03-03T14:06:00Z",
+      "expected": { "state": "RED", "phase": "post_event", "event_name": "FOMC Rate Decision", "send": true }
+    },
+    {
+      "now": "2026-03-03T14:10:00Z",
+      "expected": { "state": "GREEN", "phase": "none", "event_name": null, "send": true }
+    }
+  ]
+}

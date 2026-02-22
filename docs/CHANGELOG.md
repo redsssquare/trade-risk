@@ -8,6 +8,12 @@
 
 ### Added
 
+- **Этап 6: Минимальные тест-кейсы перед merge** (2026-02-22) — завершён.
+  - JSON-фактуры в `docs/fixtures/stage6/`: single_event, batch_cluster, anchor_primary, overlapping_anchor_in_cluster.
+  - Runner `scripts/run-stage6-min-regression.js`: проверка expected vs actual (state, phase, event_name, send/no-send), отчёт по расхождениям.
+  - npm script `test:stage6`. Чеклист перед merge: [docs/stage6-pre-merge-checklist.md](stage6-pre-merge-checklist.md).
+  - Цель: быстрый регрессионный контроль между чатами агентов.
+
 - **Этап 5: Render-шаблоны отдельно от вычислений** (2026-02-22) — завершён.
   - Добавлен отдельный слой шаблонного рендера: `services/bridge/render/telegram-render.js` + шаблоны `high` и `anchor_high`.
   - В шаблонах для `pre_event` добавлена поддержка серии публикаций: при `cluster_size > 1` текст формируется как серия, а не одиночное событие.

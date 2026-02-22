@@ -1,0 +1,46 @@
+{
+  "scenario_id": "batch_cluster",
+  "description": "Three High events inside one 5-minute cluster; verifies nearest primary and send/no-send by state/phase transitions.",
+  "events": [
+    {
+      "title": "German Ifo",
+      "date": "2026-03-03T09:30:00Z",
+      "impact": "High",
+      "currency": "EUR"
+    },
+    {
+      "title": "Eurozone PMI",
+      "date": "2026-03-03T09:33:00Z",
+      "impact": "High",
+      "currency": "EUR"
+    },
+    {
+      "title": "US Jobless Claims",
+      "date": "2026-03-03T09:35:00Z",
+      "impact": "High",
+      "currency": "USD"
+    }
+  ],
+  "steps": [
+    {
+      "now": "2026-03-03T09:25:00Z",
+      "expected": { "state": "RED", "phase": "pre_event", "event_name": "German Ifo", "send": true }
+    },
+    {
+      "now": "2026-03-03T09:32:00Z",
+      "expected": { "state": "RED", "phase": "during_event", "event_name": "Eurozone PMI", "send": true }
+    },
+    {
+      "now": "2026-03-03T09:36:00Z",
+      "expected": { "state": "RED", "phase": "during_event", "event_name": "US Jobless Claims", "send": false }
+    },
+    {
+      "now": "2026-03-03T09:40:00Z",
+      "expected": { "state": "RED", "phase": "post_event", "event_name": "US Jobless Claims", "send": true }
+    },
+    {
+      "now": "2026-03-03T09:45:00Z",
+      "expected": { "state": "GREEN", "phase": "none", "event_name": null, "send": true }
+    }
+  ]
+}
