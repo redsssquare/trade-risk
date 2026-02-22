@@ -3,6 +3,7 @@ const OpenAI = require("openai");
 const fs = require("fs");
 const path = require("path");
 const { computeFromRawEvents } = require("./lib/volatility-compute");
+const { classifyImpactTypeForEvent } = require("./lib/anchor-event-classifier");
 
 const app = express();
 const PORT = 3000;
@@ -22,8 +23,6 @@ const HEARTBEAT_INTERVAL_MS = Number.isFinite(HEARTBEAT_INTERVAL_MS_RAW) && HEAR
   : 60 * 60 * 1000;
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const SIMULATION_NOW = process.env.SIMULATION_NOW || "";
-const ANCHOR_EVENTS_PATH = process.env.ANCHOR_EVENTS_PATH ||
-  (__dirname.includes("services") ? path.resolve(__dirname, "../../data/anchor_events.json") : path.resolve(__dirname, "data/anchor_events.json"));
 const PRE_EVENT_WINDOW_MS = 7 * 60 * 1000;
 const DURING_EVENT_WINDOW_MS = 4 * 60 * 1000;
 const POST_EVENT_WINDOW_MS = 9 * 60 * 1000;
@@ -218,37 +217,6 @@ app.get("/calendar-feed", async (_req, res) => {
 
 const normalizeText = (value) => String(value || "").toLowerCase().trim();
 
-const loadAnchorHighAliases = () => {
-  try {
-    const raw = fs.readFileSync(ANCHOR_EVENTS_PATH, "utf8");
-    const parsed = JSON.parse(raw);
-    const events = parsed && Array.isArray(parsed.anchor_high_events)
-      ? parsed.anchor_high_events
-      : [];
-    return events
-      .flatMap((entry) => Array.isArray(entry.aliases) ? entry.aliases : [])
-      .map((alias) => normalizeText(alias))
-      .filter(Boolean);
-  } catch (error) {
-    console.warn("[bridge:anchor_events:load_failed]", JSON.stringify({
-      path: ANCHOR_EVENTS_PATH,
-      error: error && error.message ? error.message : "unknown_error"
-    }));
-    return [];
-  }
-};
-
-const ANCHOR_HIGH_ALIASES = loadAnchorHighAliases();
-
-const isAnchorHighByEventName = (eventName) => {
-  const normalizedEventName = normalizeText(eventName);
-  if (!normalizedEventName) {
-    return false;
-  }
-
-  return ANCHOR_HIGH_ALIASES.some((alias) => normalizedEventName.includes(alias));
-};
-
 const getEffectiveNowMs = () => (SIMULATION_MODE ? SIMULATION_NOW_MS : Date.now());
 
 const resolvePhaseFromEventTime = (eventTimeMs, effectiveNowMs) => {
@@ -284,9 +252,26 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
   const impactRaw = normalizeText(safeContext.impact || "High");
   const isHighImpactEvent = state === "RED" && (impactRaw === "high" || !impactRaw);
   const impactTypeFromContext = normalizeText(safeContext.impact_type);
+  const fallbackClassification = classifyImpactTypeForEvent({
+    title: eventName,
+    impact: isHighImpactEvent ? "High" : ""
+  });
   const impactType = impactTypeFromContext === "anchor_high" || impactTypeFromContext === "high"
     ? impactTypeFromContext
-    : (isHighImpactEvent && isAnchorHighByEventName(eventName) ? "anchor_high" : "high");
+    : (fallbackClassification.impact_type || "high");
+  const anchorLabel = typeof safeContext.anchor_label === "string" && safeContext.anchor_label.trim()
+    ? safeContext.anchor_label.trim()
+    : (impactType === "anchor_high" ? fallbackClassification.anchor_label : null);
+  const clusterHasAnchor = safeContext.cluster_has_anchor === true || safeContext.contextual_anchor === true;
+  const clusterAnchorNames = Array.isArray(safeContext.cluster_anchor_names)
+    ? safeContext.cluster_anchor_names
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean)
+    : (Array.isArray(safeContext.contextual_anchor_names)
+      ? safeContext.contextual_anchor_names
+        .map((entry) => String(entry || "").trim())
+        .filter(Boolean)
+      : []);
   const contextualAnchor = safeContext.contextual_anchor === true;
   const contextualAnchorNames = Array.isArray(safeContext.contextual_anchor_names)
     ? safeContext.contextual_anchor_names
@@ -310,8 +295,11 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
     minutes_to_event: minutesToEvent,
     event_name: eventName || "N/A",
     event_time: eventTime,
+    anchor_label: anchorLabel,
     contextual_anchor: contextualAnchor,
     contextual_anchor_names: contextualAnchorNames,
+    cluster_has_anchor: clusterHasAnchor,
+    cluster_anchor_names: clusterAnchorNames,
     primary_event: primaryEvent
   };
 };
@@ -360,14 +348,15 @@ const LLM_SYSTEM_PROMPT = [
   "If impact_type = anchor_high: event_name MUST be in the first sentence.",
   "If phase = during_event: text MUST contain one of exact phrases:",
   "\"опубликованы данные\" OR \"опубликован\" OR \"вышли данные\" OR \"публикация состоялась\".",
-  "If contextual_anchor = true: mention at least one item from contextual_anchor_names explicitly.",
+  "If cluster_has_anchor = true: treat cluster_anchor_names as higher-priority context.",
+  "If contextual_anchor = true OR cluster_has_anchor = true: mention at least one anchor item explicitly.",
   "Forbidden words are strictly disallowed everywhere:",
   "\"рекомендуем\", \"будьте\", \"следите\", \"критический\", \"экстремальный\", \"паника\", \"режим\", \"уровень\", \"контроль\".",
   "Template rules:",
   "- state=GREEN -> \"🟢 Volatility Window Closed. No high-impact events active.\"",
   "- state=RED & impact_type=high & phase=during_event -> include phrase \"публикация состоялась\".",
   "- state=RED & impact_type=anchor_high & phase=during_event -> first sentence with event_name AND include phrase \"публикация состоялась\".",
-  "- state=RED & impact_type=high & contextual_anchor=true -> include one anchor name from contextual_anchor_names.",
+  "- state=RED & impact_type=high & cluster_has_anchor=true -> include one anchor name from cluster_anchor_names.",
   "Max 220 chars, max 3 sentences.",
   "Нарушение этих правил недопустимо.",
   "Сообщение должно соответствовать всем условиям.",
@@ -732,8 +721,11 @@ if (bridgeCronEnabled) {
               impact: "High",
               phase: result.phase,
               impact_type: result.impact_type,
+              anchor_label: result.anchor_label,
               contextual_anchor: result.contextual_anchor,
               contextual_anchor_names: result.contextual_anchor_names,
+              cluster_has_anchor: result.cluster_has_anchor,
+              cluster_anchor_names: result.cluster_anchor_names,
               primary_event: result.primary_event
             };
           })()
@@ -866,9 +858,12 @@ app.post("/hooks/event", async (req, res) => {
     transition_type: transitionType,
     state: volatilityPayload && volatilityPayload.state,
     impact_type: volatilityPayload && volatilityPayload.impact_type,
+    anchor_label: volatilityPayload && volatilityPayload.anchor_label,
     primary_event: volatilityPayload && volatilityPayload.primary_event,
     contextual_anchor: volatilityPayload && volatilityPayload.contextual_anchor,
     contextual_anchor_names: volatilityPayload && volatilityPayload.contextual_anchor_names,
+    cluster_has_anchor: volatilityPayload && volatilityPayload.cluster_has_anchor,
+    cluster_anchor_names: volatilityPayload && volatilityPayload.cluster_anchor_names,
     active_event_name: volatilityPayload && volatilityPayload.event_name,
     active_event_time: volatilityPayload && volatilityPayload.event_time,
     event_name: volatilityPayload && volatilityPayload.event_name,

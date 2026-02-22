@@ -12,6 +12,7 @@
 - Этап 2: завершён.
 - Этап 2.5: завершён (декомпозиция Compute на логические блоки).
 - Этап 3: завершён (модуль «пачка новостей» / cluster без anchor).
+- Этап 4: завершён (модуль классификации high vs anchor_high).
 
 ## 1) Текущий рабочий контур
 
@@ -25,6 +26,8 @@
 Ключевые файлы:
 - `n8n-volatility-window-workflow.json` (единственный workflow-файл)
 - `services/bridge/server.js`
+- `lib/volatility-compute.js`, `lib/anchor-event-classifier.js`
+- `data/anchor_events.json` (алиасы anchor-событий)
 - `data/simulated_day.json`
 - `docker-compose.yml`
 - `.env`
@@ -45,6 +48,7 @@
 ## 3) Текущие бизнес-правила MVP
 
 - **Кластеризация (Этап 3):** события High в пределах `CLUSTER_WINDOW_MIN` (5 мин) объединяются в один кластер. Уведомление — одно на серию, а не на каждое событие. В `context` добавляются `cluster_size`, `cluster_events`, `cluster_window_min` (опционально).
+- **Anchor vs high (Этап 4):** классификатор различает anchor-события (NFP, FOMC, CPI, ECB/BOE/BOJ Rate Decision, Powell Speech) и обычные High. Алиасы в `data/anchor_events.json`. В LLM-вход идут `impact_type` (`anchor_high`/`high`), `anchor_label`, `cluster_has_anchor`, `cluster_anchor_names` — LLM может упомянуть anchor даже если primary не anchor.
 - Фазы:
   - `pre_event`: 7 минут до первого события кластера
   - `during_event`: от начала кластера до конца последнего события + 4 мин
@@ -72,7 +76,7 @@
 
 Кратко:
 - **Вход Feed:** `items[]` с полями `title`, `date`, `impact` (Compute фильтрует по `impact === "High"`).
-- **Выход Compute / вход Bridge:** `event_type`, `state`, `phase`, `timestamp`, `context` (опционально в `context`: `cluster_size`, `cluster_events`, `cluster_window_min`).
+- **Выход Compute / вход Bridge:** `event_type`, `state`, `phase`, `timestamp`, `context` (опционально: `cluster_size`, `cluster_events`, `cluster_window_min`, `impact_type`, `anchor_label`, `cluster_has_anchor`, `cluster_anchor_names`).
 
 ## 6) Что нельзя ломать (и нельзя менять без согласования)
 
@@ -86,7 +90,7 @@
 
 ## 7) Минимальная проверка после каждого шага
 
-**Контракт:** `npm run test:volatility:docker` (или `npm run test:volatility` при Node 14+) — прогон Compute по [docs/volatility_test_cases.md](docs/volatility_test_cases.md). Ручная проверка: [docs/MVP-CONTRACT.md](docs/MVP-CONTRACT.md) §5 (test JSON → Compute → Bridge → telegram_text).
+**Контракт:** `npm run test:volatility:docker` (или `npm run test:volatility` при Node 14+) — прогон Compute по [docs/volatility_test_cases.md](docs/volatility_test_cases.md). Anchor-классификатор: `npm run test:anchor-classifier`. Ручная проверка: [docs/MVP-CONTRACT.md](docs/MVP-CONTRACT.md) §5 (test JSON → Compute → Bridge → telegram_text).
 
 1. Workflow активен в n8n.
 2. Последние execution успешны.

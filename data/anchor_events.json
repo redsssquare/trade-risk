@@ -1,25 +1,66 @@
 {
   "anchor_high_events": [
     {
-      "key": "fed_rate_decision",
+      "key": "us_nfp",
+      "anchor_label": "NFP",
       "aliases": [
-        "fomc",
-        "fed rate",
-        "interest rate decision"
+        "nfp",
+        "non-farm payrolls",
+        "non farm payrolls",
+        "nonfarm payrolls"
       ]
     },
     {
-      "key": "us_cpi",
+      "key": "fomc_rate_decision",
+      "anchor_label": "FOMC Rate Decision",
       "aliases": [
-        "cpi",
+        "fomc rate decision",
+        "fed rate decision",
+        "federal reserve rate decision",
+        "federal funds rate decision"
+      ]
+    },
+    {
+      "key": "us_cpi_main_release",
+      "anchor_label": "US CPI",
+      "aliases": [
+        "us cpi",
+        "cpi y/y",
+        "cpi m/m",
         "consumer price index"
       ]
     },
     {
-      "key": "us_nfp",
+      "key": "ecb_rate_decision",
+      "anchor_label": "ECB Rate Decision",
       "aliases": [
-        "non-farm payrolls",
-        "nfp"
+        "ecb rate decision",
+        "ecb interest rate decision"
+      ]
+    },
+    {
+      "key": "boe_rate_decision",
+      "anchor_label": "BOE Rate Decision",
+      "aliases": [
+        "boe rate decision",
+        "bank of england rate decision"
+      ]
+    },
+    {
+      "key": "boj_rate_decision",
+      "anchor_label": "BOJ Rate Decision",
+      "aliases": [
+        "boj rate decision",
+        "bank of japan rate decision"
+      ]
+    },
+    {
+      "key": "powell_speech_post_fomc",
+      "anchor_label": "Powell Speech",
+      "aliases": [
+        "powell speech",
+        "powell speaks",
+        "fed chair powell"
       ]
     }
   ]

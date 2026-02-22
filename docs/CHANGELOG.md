@@ -8,6 +8,12 @@
 
 ### Added
 
+- **Этап 4: Модуль классификации high vs anchor_high** (2026-02-22)
+  - Конфиг алиасов в `data/anchor_events.json` (NFP, FOMC Rate Decision, US CPI, ECB/BOE/BOJ Rate Decision, Powell Speech) как единый источник истины.
+  - Классификатор `lib/anchor-event-classifier.js`: `impact_type` (`anchor_high`/`high`), `anchor_label`.
+  - В LLM-контекст добавлены `cluster_has_anchor`, `cluster_anchor_names` — при primary=high и anchor в кластере LLM может написать «включая …».
+  - Тесты: `npm run test:anchor-classifier` (anchor match, high non-anchor, ambiguous title, серия+anchor в кластере).
+
 - **Этап 3: Модуль «пачка новостей» (cluster)** (2026-02-22)
   - Кластеризация близких High-событий (в пределах `CLUSTER_WINDOW_MIN=5` мин) — одно уведомление на серию вместо спама по каждому событию.
   - В `context` добавлены опциональные поля: `cluster_size`, `cluster_events`, `cluster_window_min`.

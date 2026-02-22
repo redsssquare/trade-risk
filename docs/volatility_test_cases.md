@@ -44,8 +44,8 @@ CPI в 10:12 — в одном окне с UK GDP (10:03–10:15).
 
 | now | events (name, time, impact) | expected primary_event | expected phase | expected impact_type | contextual_anchor | contextual_anchor_names |
 |---|---|---|---|---|---|---|
-| 2026-03-03T14:58:00Z | US ISM Services, 2026-03-03T15:00:00Z, High; FOMC Minutes, 2026-03-03T15:20:00Z, High | US ISM Services @ 15:00 | pre_event | high | false | [] |
-| 2026-03-03T15:14:00Z | US ISM Services, 2026-03-03T15:00:00Z, High; FOMC Minutes, 2026-03-03T15:20:00Z, High | FOMC Minutes @ 15:20 | pre_event | anchor_high | false | [] |
+| 2026-03-03T14:58:00Z | US ISM Services, 2026-03-03T15:00:00Z, High; FOMC Rate Decision, 2026-03-03T15:20:00Z, High | US ISM Services @ 15:00 | pre_event | high | false | [] |
+| 2026-03-03T15:14:00Z | US ISM Services, 2026-03-03T15:00:00Z, High; FOMC Rate Decision, 2026-03-03T15:20:00Z, High | FOMC Rate Decision @ 15:20 | pre_event | anchor_high | false | [] |
 
 ## Сценарий 6: Событие уже прошло (post -> green)
 
@@ -122,10 +122,10 @@ CPI в 10:12 — в одном окне с UK GDP (10:03–10:15).
 ### Сценарий 5: Anchor через 20 минут после обычного High
 
 1. **Как задать now вручную:** `2026-03-03T14:58:00Z`, затем `2026-03-03T15:14:00Z`.
-2. **Как подставить events JSON:** `[{"title":"US ISM Services","date":"2026-03-03T15:00:00Z","impact":"High","currency":"USD"},{"title":"FOMC Minutes","date":"2026-03-03T15:20:00Z","impact":"High","currency":"USD"}]`.
+2. **Как подставить events JSON:** `[{"title":"US ISM Services","date":"2026-03-03T15:00:00Z","impact":"High","currency":"USD"},{"title":"FOMC Rate Decision","date":"2026-03-03T15:20:00Z","impact":"High","currency":"USD"}]`.
 3. **Какие поля должны попасть в bridge:** `primary_event`, `impact_type`, `contextual_anchor`, `contextual_anchor_names`.
 4. **Какие логи проверить:** сначала обычный high, затем переключение на anchor primary.
-5. **Успех:** в `14:58` primary=`US ISM Services`, `impact_type=high`, `contextual_anchor=false`; в `15:14` primary=`FOMC Minutes`, `impact_type=anchor_high`, `contextual_anchor=false`.
+5. **Успех:** в `14:58` primary=`US ISM Services`, `impact_type=high`, `contextual_anchor=false`; в `15:14` primary=`FOMC Rate Decision`, `impact_type=anchor_high`, `contextual_anchor=false`.
 6. **Ошибка:** anchor не становится primary при приближении, или появляется неверный contextual anchor.
 
 ### Сценарий 6: Событие уже прошло (post -> green)

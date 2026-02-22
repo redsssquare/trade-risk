@@ -16,9 +16,9 @@
 const fs = require("fs");
 const path = require("path");
 const { computeFromRawEvents } = require("../lib/volatility-compute.js");
+const { classifyImpactTypeForEvent } = require("../lib/anchor-event-classifier");
 
 const DOCS_PATH = path.resolve(__dirname, "../docs/volatility_test_cases.md");
-const ANCHOR_EVENTS_PATH = path.resolve(__dirname, "../data/anchor_events.json");
 const PRE_EVENT_WINDOW_MS = 7 * 60 * 1000;
 const DURING_EVENT_WINDOW_MS = 4 * 60 * 1000;
 const POST_EVENT_WINDOW_MS = 9 * 60 * 1000;
@@ -41,30 +41,6 @@ const RESOLVED_AI_TIMEOUT_MS = Number.isFinite(AI_TIMEOUT_MS) && AI_TIMEOUT_MS >
 
 function normalizeText(value) {
   return String(value || "").toLowerCase().trim();
-}
-
-function loadAnchorHighAliases() {
-  try {
-    const raw = fs.readFileSync(ANCHOR_EVENTS_PATH, "utf8");
-    const parsed = JSON.parse(raw);
-    const events = parsed && Array.isArray(parsed.anchor_high_events)
-      ? parsed.anchor_high_events
-      : [];
-    return events
-      .flatMap((entry) => Array.isArray(entry.aliases) ? entry.aliases : [])
-      .map((alias) => normalizeText(alias))
-      .filter(Boolean);
-  } catch (_error) {
-    return [];
-  }
-}
-
-const ANCHOR_HIGH_ALIASES = loadAnchorHighAliases();
-
-function isAnchorHighByEventName(eventName) {
-  const normalizedEventName = normalizeText(eventName);
-  if (!normalizedEventName) return false;
-  return ANCHOR_HIGH_ALIASES.some((alias) => normalizedEventName.includes(alias));
 }
 
 function resolvePhaseFromEventTime(eventTimeMs, effectiveNowMs) {
@@ -100,9 +76,12 @@ function buildBridgeLikeContextFromCompute(computeResult, nowMs) {
     minutes_to_event: minutesToEvent,
     impact: "High",
     impact_type: computeResult.impact_type,
+    anchor_label: computeResult.anchor_label,
     phase: computeResult.phase,
     contextual_anchor: computeResult.contextual_anchor,
     contextual_anchor_names: computeResult.contextual_anchor_names,
+    cluster_has_anchor: computeResult.cluster_has_anchor,
+    cluster_anchor_names: computeResult.cluster_anchor_names,
     primary_event: {
       name: computeResult.primary_event.name,
       time: computeResult.primary_event.time
@@ -123,9 +102,28 @@ function buildVolatilityPayloadLikeBridge(state, context, effectiveNowMs) {
   const impactRaw = normalizeText(safeContext.impact || "High");
   const isHighImpactEvent = state === "RED" && (impactRaw === "high" || !impactRaw);
   const impactTypeFromContext = normalizeText(safeContext.impact_type);
+  const fallbackImpactType = classifyImpactTypeForEvent({
+    title: eventName,
+    impact: isHighImpactEvent ? "High" : ""
+  }).impact_type || "high";
   const impactType = impactTypeFromContext === "anchor_high" || impactTypeFromContext === "high"
     ? impactTypeFromContext
-    : (isHighImpactEvent && isAnchorHighByEventName(eventName) ? "anchor_high" : "high");
+    : fallbackImpactType;
+  const anchorLabel = typeof safeContext.anchor_label === "string" && safeContext.anchor_label.trim()
+    ? safeContext.anchor_label.trim()
+    : (impactType === "anchor_high"
+      ? classifyImpactTypeForEvent({ title: eventName, impact: "High" }).anchor_label
+      : null);
+  const clusterHasAnchor = safeContext.cluster_has_anchor === true || safeContext.contextual_anchor === true;
+  const clusterAnchorNames = Array.isArray(safeContext.cluster_anchor_names)
+    ? safeContext.cluster_anchor_names
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean)
+    : (Array.isArray(safeContext.contextual_anchor_names)
+      ? safeContext.contextual_anchor_names
+        .map((entry) => String(entry || "").trim())
+        .filter(Boolean)
+      : []);
   const contextualAnchor = safeContext.contextual_anchor === true;
   const contextualAnchorNames = Array.isArray(safeContext.contextual_anchor_names)
     ? safeContext.contextual_anchor_names
@@ -148,8 +146,11 @@ function buildVolatilityPayloadLikeBridge(state, context, effectiveNowMs) {
     minutes_to_event: minutesToEvent,
     event_name: eventName || "N/A",
     event_time: eventTime,
+    anchor_label: anchorLabel,
     contextual_anchor: contextualAnchor,
     contextual_anchor_names: contextualAnchorNames,
+    cluster_has_anchor: clusterHasAnchor,
+    cluster_anchor_names: clusterAnchorNames,
     primary_event: primaryEvent
   };
 }
@@ -609,6 +610,10 @@ async function runTestCase(tc, index, withLlm, openaiClient) {
   const actualImpact = result.impact_type;
   const actualAnchor = result.contextual_anchor;
   const actualAnchorNames = result.contextual_anchor_names;
+  const actualClusterHasAnchor = result.cluster_has_anchor === true;
+  const actualClusterAnchorNames = Array.isArray(result.cluster_anchor_names)
+    ? result.cluster_anchor_names
+    : [];
 
   const expPrimary = tc.expected.primary_event;
   const expPhase = tc.expected.phase;
@@ -630,7 +635,17 @@ async function runTestCase(tc, index, withLlm, openaiClient) {
     expAnchorNames.length === actualAnchorNames.length &&
     expAnchorNames.every((n, i) => n === actualAnchorNames[i]);
 
-  const pass = primaryOk && phaseOk && impactOk && anchorOk && anchorNamesOk;
+  const clusterContextInvariantOk = !actualClusterHasAnchor || actualClusterAnchorNames.length > 0;
+  const pass = primaryOk && phaseOk && impactOk && anchorOk && anchorNamesOk && clusterContextInvariantOk;
+
+  const bridgeLikeContext = buildBridgeLikeContextFromCompute(result, tc.nowMs);
+  const volatilityPayload = buildVolatilityPayloadLikeBridge(result.state, bridgeLikeContext, tc.nowMs);
+  const llmInputClusterInvariantOk = !actualClusterHasAnchor || (
+    volatilityPayload.cluster_has_anchor === true &&
+    Array.isArray(volatilityPayload.cluster_anchor_names) &&
+    volatilityPayload.cluster_anchor_names.length > 0
+  );
+  const finalPass = pass && llmInputClusterInvariantOk;
 
   let llmValidation = null;
   if (withLlm) {
@@ -639,12 +654,15 @@ async function runTestCase(tc, index, withLlm, openaiClient) {
     } else if (!openaiClient) {
       llmValidation = { pass: false, reason: "openai_client_unavailable", telegram_text: "" };
     } else {
-      const bridgeLikeContext = buildBridgeLikeContextFromCompute(result, tc.nowMs);
-      const volatilityPayload = buildVolatilityPayloadLikeBridge(result.state, bridgeLikeContext, tc.nowMs);
+      const hasClusterAnchorInLlmInput = volatilityPayload.cluster_has_anchor === true &&
+        Array.isArray(volatilityPayload.cluster_anchor_names) &&
+        volatilityPayload.cluster_anchor_names.length > 0;
       const llmResult = await generateMessageWithLlmWithRepair(volatilityPayload, openaiClient);
       llmValidation = {
-        pass: llmResult.ok,
-        reason: llmResult.ok ? "ok" : llmResult.reason,
+        pass: llmResult.ok && (actualClusterHasAnchor ? hasClusterAnchorInLlmInput : true),
+        reason: !llmResult.ok
+          ? llmResult.reason
+          : (actualClusterHasAnchor && !hasClusterAnchorInLlmInput ? "missing_cluster_anchor_in_llm_input" : "ok"),
         telegram_text: llmResult.telegram_text || "",
         repair_triggered: llmResult.repair_triggered === true
       };
@@ -653,7 +671,8 @@ async function runTestCase(tc, index, withLlm, openaiClient) {
 
   return {
     index,
-    pass,
+    pass: finalPass,
+    llm_input_cluster_ok: llmInputClusterInvariantOk,
     llmValidation,
     now: tc.now,
     expected: {
@@ -668,7 +687,9 @@ async function runTestCase(tc, index, withLlm, openaiClient) {
       phase: actualPhase,
       impact_type: actualImpact,
       contextual_anchor: actualAnchor,
-      contextual_anchor_names: actualAnchorNames
+      contextual_anchor_names: actualAnchorNames,
+      cluster_has_anchor: actualClusterHasAnchor,
+      cluster_anchor_names: actualClusterAnchorNames
     }
   };
 }
@@ -718,6 +739,9 @@ async function main() {
     console.log(`actual_contextual_anchor:   ${r.actual.contextual_anchor}`);
     console.log(`expected_contextual_anchor_names: ${JSON.stringify(r.expected.contextual_anchor_names)}`);
     console.log(`actual_contextual_anchor_names:   ${JSON.stringify(r.actual.contextual_anchor_names)}`);
+    console.log(`actual_cluster_has_anchor:   ${r.actual.cluster_has_anchor}`);
+    console.log(`actual_cluster_anchor_names: ${JSON.stringify(r.actual.cluster_anchor_names)}`);
+    console.log(`llm_input_cluster_ok: ${r.llm_input_cluster_ok}`);
     console.log(`result: ${r.pass ? "PASS" : "FAIL"}`);
     if (withLlm) {
       console.log(`validation: ${r.llmValidation && r.llmValidation.pass ? "PASS" : "FAIL"}`);
