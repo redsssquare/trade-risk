@@ -46,7 +46,8 @@ const metrics = {
 };
 const notificationState = {
   previous_state: null,
-  previous_phase: null
+  previous_phase: null,
+  previous_cluster_size: 0
 };
 
 const SIMULATION_NOW_MS = SIMULATION_NOW ? Date.parse(SIMULATION_NOW) : null;
@@ -355,7 +356,9 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
   };
 };
 
-const generateMessageWithTemplate = (volatilityPayload) => renderTelegramTextTemplate(volatilityPayload);
+const generateMessageWithTemplate = (volatilityPayload) => renderTelegramTextTemplate(volatilityPayload, {
+  previousClusterSize: notificationState.previous_cluster_size
+});
 
 const buildLlmUserMessage = (volatilityPayload) => JSON.stringify(volatilityPayload, null, 2);
 
@@ -853,6 +856,7 @@ app.post("/hooks/event", async (req, res) => {
       }
       notificationState.previous_state = currentState;
       notificationState.previous_phase = currentPhase;
+      notificationState.previous_cluster_size = volatilityPayload.cluster_size || 0;
     } else {
       if (isVolatilityTick) {
         telegramMessage = [
@@ -866,6 +870,7 @@ app.post("/hooks/event", async (req, res) => {
       }
       notificationState.previous_state = currentState;
       notificationState.previous_phase = currentPhase;
+      notificationState.previous_cluster_size = volatilityPayload.cluster_size || 0;
     }
   }
 
