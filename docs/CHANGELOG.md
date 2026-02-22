@@ -8,6 +8,11 @@
 
 ### Added
 
+- **Compute декомпозиция на подмодули** (2026-02-22)
+  - Логика внутри ноды `Compute Volatility State` разделена на явные блоки: NormalizeInput, BuildActiveCandidates, ResolvePhaseAndState, DiffWithPreviousState, BuildOutputPayload.
+  - При сбое в логах execution пишется `failed_block` — видно, на каком шаге произошла ошибка.
+  - Контракт payload и окна фаз сохранены без изменений.
+
 - **Bridge internal cron** (2026-02-22)
   - Bridge сам запускает проверку volatility каждые `BRIDGE_CRON_INTERVAL_MS` (по умолчанию 30 с).
   - Работает независимо от n8n — решает проблему пропуска `post_event`, когда n8n cron срабатывает раз в минуту и «промахивается» по коротким окнам.
