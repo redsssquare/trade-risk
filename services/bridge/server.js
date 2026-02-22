@@ -124,6 +124,11 @@ app.get("/calendar-feed", async (_req, res) => {
       if (!data || !Array.isArray(data.events)) {
         return res.status(500).json({ error: "invalid_test_feed_shape" });
       }
+      const currencyFromTitle = (title) => {
+        if (!title || typeof title !== "string") return "USD";
+        const m = title.match(/^\s*(USD|EUR|GBP|JPY|AUD|CAD|CHF|NZD|CNY)\b/i);
+        return m ? m[1].toUpperCase() : (title.match(/\b(FOMC|Fed|NFP|Nonfarm|CPI|ISM)\b/i) ? "USD" : "USD");
+      };
       const items = data.events
         .filter((entry) =>
           entry &&
@@ -132,7 +137,7 @@ app.get("/calendar-feed", async (_req, res) => {
           typeof entry.impact === "string")
         .map((entry) => ({
           title: entry.name,
-          country: "USD",
+          country: entry.country || currencyFromTitle(entry.name),
           date: entry.time,
           impact: entry.impact,
           forecast: "",
@@ -233,13 +238,15 @@ const normalizeClusterEvents = (clusterEvents) => {
       const name = String(event.name || event.title || "").trim();
       const time = String(event.time || event.date || "").trim();
       const impact = String(event.impact || "").trim();
+      const currency = String(event.currency || event.country || "").trim().toUpperCase();
       if (!name || !time) {
         return null;
       }
       return {
         name,
         time,
-        impact
+        impact,
+        currency: currency || null
       };
     })
     .filter(Boolean);
@@ -338,6 +345,15 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
       ? resolvePhaseFromEventTime(eventTimeMs, effectiveNowMs)
       : (state === "GREEN" ? "none" : fallbackPhase));
 
+  const primaryCurrency = String(safeContext.currency || safeContext.country || "").trim().toUpperCase() || null;
+  const clusterCurrencies = clusterEvents
+    .map((e) => e.currency)
+    .filter(Boolean);
+  const allCurrencies = primaryCurrency
+    ? [primaryCurrency, ...clusterCurrencies]
+    : clusterCurrencies;
+  const currencies = [...new Set(allCurrencies)];
+
   return {
     state: state === "RED" ? "RED" : "GREEN",
     impact_type: impactType,
@@ -352,7 +368,8 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
     cluster_anchor_names: clusterAnchorNames,
     cluster_size: clusterSize,
     cluster_events: clusterEvents,
-    primary_event: primaryEvent
+    primary_event: primaryEvent,
+    currencies
   };
 };
 

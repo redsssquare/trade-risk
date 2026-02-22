@@ -10,11 +10,11 @@ const {
 
 const PHASE_KEYS = { PRE_EVENT: "pre", DURING_EVENT: "dur", POST_EVENT: "post" };
 
-const renderPhrase = (phasePool, phaseKey, category, payload) => {
+const renderPhrase = (phasePool, phaseKey, category, payload, phraseOpts) => {
   const pool = phasePool[category];
   if (!pool || pool.length === 0) return null;
   const phrase = pickFromPool(`${phaseKey}_${category}`, pool);
-  return phrase ? applyPlaceholders(phrase, payload) : null;
+  return phrase ? applyPlaceholders(phrase, payload, phraseOpts) : null;
 };
 
 const renderTelegramTextTemplate = (payload, opts) => {
@@ -33,7 +33,7 @@ const renderTelegramTextTemplate = (payload, opts) => {
   const category = resolveCategory(payload);
 
   if (phase === "pre_event") {
-    return renderPhrase(PRE_EVENT, "pre", category, payload)
+    return renderPhrase(PRE_EVENT, "pre", category, payload, { appendCurrencies: true })
       || `⚠️ Через ${payload.minutes_to_event || 0} минут публикация важных экономических данных.`;
   }
   if (phase === "during_event") {
