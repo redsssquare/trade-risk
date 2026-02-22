@@ -3,7 +3,8 @@ const OpenAI = require("openai");
 const fs = require("fs");
 const path = require("path");
 const { computeFromRawEvents } = require("./lib/volatility-compute");
-const { classifyImpactTypeForEvent } = require("./lib/anchor-event-classifier");
+const { classifyImpactTypeForEvent, getClusterAnchorNames } = require("./lib/anchor-event-classifier");
+const { renderTelegramTextTemplate, getDuringEventFirstLine } = require("./render/telegram-render");
 
 const app = express();
 const PORT = 3000;
@@ -219,6 +220,30 @@ const normalizeText = (value) => String(value || "").toLowerCase().trim();
 
 const getEffectiveNowMs = () => (SIMULATION_MODE ? SIMULATION_NOW_MS : Date.now());
 
+const normalizeClusterEvents = (clusterEvents) => {
+  if (!Array.isArray(clusterEvents)) {
+    return [];
+  }
+  return clusterEvents
+    .map((event) => {
+      if (!event || typeof event !== "object") {
+        return null;
+      }
+      const name = String(event.name || event.title || "").trim();
+      const time = String(event.time || event.date || "").trim();
+      const impact = String(event.impact || "").trim();
+      if (!name || !time) {
+        return null;
+      }
+      return {
+        name,
+        time,
+        impact
+      };
+    })
+    .filter(Boolean);
+};
+
 const resolvePhaseFromEventTime = (eventTimeMs, effectiveNowMs) => {
   if (!Number.isFinite(eventTimeMs)) {
     return "none";
@@ -244,11 +269,17 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
   const eventName = String(safeContext.event_name || safeContext.event_title || "").trim();
   const eventTime = safeContext.event_time || "N/A";
   const eventTimeMs = Date.parse(eventTime);
-  const minutesToEvent = Number.isFinite(eventTimeMs)
+  const minutesToEventFromContext = Number.isFinite(safeContext.minutes_to_event)
+    ? safeContext.minutes_to_event
+    : null;
+  const minutesToEventFromEventTime = Number.isFinite(eventTimeMs)
     ? (eventTimeMs > effectiveNowMs
       ? Math.max(0, Math.ceil((eventTimeMs - effectiveNowMs) / 60000))
       : 0)
-    : (Number.isFinite(safeContext.minutes_to_event) ? safeContext.minutes_to_event : 0);
+    : 0;
+  const minutesToEvent = minutesToEventFromContext !== null
+    ? Math.max(0, Math.ceil(minutesToEventFromContext))
+    : minutesToEventFromEventTime;
   const impactRaw = normalizeText(safeContext.impact || "High");
   const isHighImpactEvent = state === "RED" && (impactRaw === "high" || !impactRaw);
   const impactTypeFromContext = normalizeText(safeContext.impact_type);
@@ -262,8 +293,11 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
   const anchorLabel = typeof safeContext.anchor_label === "string" && safeContext.anchor_label.trim()
     ? safeContext.anchor_label.trim()
     : (impactType === "anchor_high" ? fallbackClassification.anchor_label : null);
-  const clusterHasAnchor = safeContext.cluster_has_anchor === true || safeContext.contextual_anchor === true;
-  const clusterAnchorNames = Array.isArray(safeContext.cluster_anchor_names)
+  const clusterEvents = normalizeClusterEvents(safeContext.cluster_events);
+  const clusterSize = Number.isFinite(safeContext.cluster_size)
+    ? Math.max(0, Math.floor(safeContext.cluster_size))
+    : clusterEvents.length;
+  const clusterAnchorNamesFromContext = Array.isArray(safeContext.cluster_anchor_names)
     ? safeContext.cluster_anchor_names
       .map((entry) => String(entry || "").trim())
       .filter(Boolean)
@@ -272,6 +306,18 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
         .map((entry) => String(entry || "").trim())
         .filter(Boolean)
       : []);
+  const clusterAnchorNamesFromEvents = clusterEvents.length > 0
+    ? getClusterAnchorNames(clusterEvents.map((event) => ({
+      title: event.name,
+      impact: event.impact
+    })))
+    : [];
+  const clusterAnchorNames = clusterAnchorNamesFromContext.length > 0
+    ? clusterAnchorNamesFromContext
+    : clusterAnchorNamesFromEvents;
+  const clusterHasAnchor = safeContext.cluster_has_anchor === true ||
+    safeContext.contextual_anchor === true ||
+    clusterAnchorNames.length > 0;
   const contextualAnchor = safeContext.contextual_anchor === true;
   const contextualAnchorNames = Array.isArray(safeContext.contextual_anchor_names)
     ? safeContext.contextual_anchor_names
@@ -281,12 +327,15 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
   const primaryEvent = safeContext.primary_event && typeof safeContext.primary_event === "object"
     ? safeContext.primary_event
     : null;
-  const fallbackPhase = typeof safeContext.phase === "string" && safeContext.phase.trim()
+  const phaseFromContext = typeof safeContext.phase === "string" && safeContext.phase.trim()
     ? safeContext.phase.trim()
-    : (state === "RED" ? (minutesToEvent > 0 ? "pre_event" : "during_event") : "none");
-  const phase = state === "RED" && Number.isFinite(eventTimeMs)
-    ? resolvePhaseFromEventTime(eventTimeMs, effectiveNowMs)
-    : (state === "GREEN" ? "none" : fallbackPhase);
+    : null;
+  const fallbackPhase = phaseFromContext || (state === "RED" ? (minutesToEvent > 0 ? "pre_event" : "during_event") : "none");
+  const phase = state === "RED" && phaseFromContext
+    ? phaseFromContext
+    : (state === "RED" && Number.isFinite(eventTimeMs)
+      ? resolvePhaseFromEventTime(eventTimeMs, effectiveNowMs)
+      : (state === "GREEN" ? "none" : fallbackPhase));
 
   return {
     state: state === "RED" ? "RED" : "GREEN",
@@ -300,34 +349,13 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
     contextual_anchor_names: contextualAnchorNames,
     cluster_has_anchor: clusterHasAnchor,
     cluster_anchor_names: clusterAnchorNames,
+    cluster_size: clusterSize,
+    cluster_events: clusterEvents,
     primary_event: primaryEvent
   };
 };
 
-const generateMessageWithTemplate = (volatilityPayload) => {
-  if (volatilityPayload.state === "GREEN") {
-    return "🟢 Volatility Window Closed\n\nNo high-impact events active.";
-  }
-
-  if (volatilityPayload.phase === "during_event") {
-    const firstLine = volatilityPayload.impact_type === "anchor_high"
-      ? `Опубликованы данные ${volatilityPayload.event_name}.`
-      : "Опубликованы экономические данные.";
-    return `${firstLine}\nРынок реагирует нейтрально, выраженного импульса не наблюдается.`;
-  }
-
-  if (volatilityPayload.impact_type === "anchor_high") {
-    return [
-      `🔴 Volatility Window: ${volatilityPayload.event_name}.`,
-      `Activation phase ${volatilityPayload.phase}, ${volatilityPayload.minutes_to_event}m to event.`
-    ].join(" ");
-  }
-
-  return [
-    "🔴 Volatility window active.",
-    `Phase ${volatilityPayload.phase}, ${volatilityPayload.minutes_to_event}m to event.`
-  ].join(" ");
-};
+const generateMessageWithTemplate = (volatilityPayload) => renderTelegramTextTemplate(volatilityPayload);
 
 const buildLlmUserMessage = (volatilityPayload) => JSON.stringify(volatilityPayload, null, 2);
 
@@ -349,6 +377,8 @@ const LLM_SYSTEM_PROMPT = [
   "If phase = during_event: text MUST contain one of exact phrases:",
   "\"опубликованы данные\" OR \"опубликован\" OR \"вышли данные\" OR \"публикация состоялась\".",
   "If cluster_has_anchor = true: treat cluster_anchor_names as higher-priority context.",
+  "If phase = pre_event AND cluster_size > 1 AND cluster_has_anchor = false: describe a series of releases, not a single event.",
+  "If phase = pre_event AND cluster_size > 1 AND cluster_has_anchor = true: describe a series and include one item from cluster_anchor_names.",
   "If contextual_anchor = true OR cluster_has_anchor = true: mention at least one anchor item explicitly.",
   "Forbidden words are strictly disallowed everywhere:",
   "\"рекомендуем\", \"будьте\", \"следите\", \"критический\", \"экстремальный\", \"паника\", \"режим\", \"уровень\", \"контроль\".",
@@ -414,6 +444,17 @@ const validateTelegramText = (telegramText, volatilityPayload) => {
     const normalizedEventName = normalizeText(volatilityPayload.event_name);
     if (normalizedEventName && !normalizedText.includes(normalizedEventName)) {
       return { ok: false, reason: "missing_event_name_for_anchor_high" };
+    }
+  }
+
+  if (volatilityPayload.cluster_has_anchor === true && volatilityPayload.phase !== "during_event") {
+    const hasAnyAnchorName = Array.isArray(volatilityPayload.cluster_anchor_names) &&
+      volatilityPayload.cluster_anchor_names.some((name) => {
+        const normalizedName = normalizeText(name);
+        return normalizedName && normalizedText.includes(normalizedName);
+      });
+    if (!hasAnyAnchorName) {
+      return { ok: false, reason: "missing_cluster_anchor_name" };
     }
   }
 
@@ -523,9 +564,7 @@ const generateMessageWithLlm = async (volatilityPayload) => {
   }
 
   if (volatilityPayload.phase === "during_event") {
-    const firstLine = volatilityPayload.impact_type === "anchor_high"
-      ? `Опубликованы данные ${volatilityPayload.event_name}.`
-      : "Опубликованы экономические данные.";
+    const firstLine = getDuringEventFirstLine(volatilityPayload);
     const systemMessage = { role: "system", content: DURING_EVENT_SECOND_LINE_PROMPT };
     const userPayloadMessage = { role: "user", content: buildLlmUserMessage(volatilityPayload) };
     const result = await createOneLlmCompletion([systemMessage, userPayloadMessage]);

@@ -8,6 +8,12 @@
 
 ### Added
 
+- **Этап 5: Render-шаблоны отдельно от вычислений** (2026-02-22) — завершён.
+  - Добавлен отдельный слой шаблонного рендера: `services/bridge/render/telegram-render.js` + шаблоны `high` и `anchor_high`.
+  - В шаблонах для `pre_event` добавлена поддержка серии публикаций: при `cluster_size > 1` текст формируется как серия, а не одиночное событие.
+  - Добавлено явное упоминание anchor внутри серии: при `cluster_has_anchor=true` используется `cluster_anchor_names` (например, «включая Non-Farm Payrolls»).
+  - Добавлен тест `npm run test:render` — детерминизм текста + 2 эталонных cluster-кейса.
+
 - **Этап 4: Модуль классификации high vs anchor_high** (2026-02-22)
   - Конфиг алиасов в `data/anchor_events.json` (NFP, FOMC Rate Decision, US CPI, ECB/BOE/BOJ Rate Decision, Powell Speech) как единый источник истины.
   - Классификатор `lib/anchor-event-classifier.js`: `impact_type` (`anchor_high`/`high`), `anchor_label`.
