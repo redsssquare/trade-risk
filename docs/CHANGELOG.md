@@ -8,6 +8,8 @@
 
 ### Added
 
+- **Верификация тестового прогона** (2026-02-22) — полный цикл успешно завершён: все фазы (pre_event, during_event, post_event) корректно отображены в Telegram, без дубликатов. Ручной smoke по [docs/stage1-test-run.md](stage1-test-run.md) пройден.
+
 - **Этап 6: Минимальные тест-кейсы перед merge** (2026-02-22) — завершён.
   - JSON-фактуры в `docs/fixtures/stage6/`: single_event, batch_cluster, anchor_primary, overlapping_anchor_in_cluster.
   - Runner `scripts/run-stage6-min-regression.js`: проверка expected vs actual (state, phase, event_name, send/no-send), отчёт по расхождениям.

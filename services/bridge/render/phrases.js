@@ -206,7 +206,7 @@ const buildCurrencyLine = (payload) => {
   const items = payload.currencies
     .map((c) => `${currencyToFlag(c)} ${c}`)
     .join(", ");
-  return `\nЗатронет: ${items}`;
+  return "\n\nЗатронет: " + items;
 };
 
 const applyPlaceholders = (phrase, payload, opts) => {

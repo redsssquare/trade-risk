@@ -24,9 +24,9 @@ const HEARTBEAT_INTERVAL_MS = Number.isFinite(HEARTBEAT_INTERVAL_MS_RAW) && HEAR
   : 60 * 60 * 1000;
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const SIMULATION_NOW = process.env.SIMULATION_NOW || "";
-const PRE_EVENT_WINDOW_MS = 7 * 60 * 1000;
-const DURING_EVENT_WINDOW_MS = 4 * 60 * 1000;
-const POST_EVENT_WINDOW_MS = 9 * 60 * 1000;
+const PRE_EVENT_WINDOW_MS = 15 * 60 * 1000;
+const DURING_EVENT_WINDOW_MS = 5 * 60 * 1000;
+const POST_EVENT_WINDOW_MS = 15 * 60 * 1000; // post_event = 10 min (from event+5 to event+15)
 const FORBIDDEN_TELEGRAM_WORDS = [
   "рекомендуем",
   "будьте",
@@ -49,6 +49,19 @@ const notificationState = {
   previous_phase: null,
   previous_cluster_size: 0
 };
+
+const NOTIFICATION_STATE_FILE = process.env.NOTIFICATION_STATE_FILE || path.join(__dirname, "bridge-state", "notification_state.json");
+try {
+  const savedRaw = fs.readFileSync(NOTIFICATION_STATE_FILE, "utf8");
+  const saved = JSON.parse(savedRaw);
+  if (saved && typeof saved.state === "string" && typeof saved.phase === "string") {
+    notificationState.previous_state = saved.state;
+    notificationState.previous_phase = saved.phase;
+    console.log("[bridge:state:loaded]", JSON.stringify({ state: saved.state, phase: saved.phase }));
+  }
+} catch (e) {
+  console.log("[bridge:state:loaded]", "none", e && e.code === "ENOENT" ? "(файл ещё не создан)" : "");
+}
 
 const SIMULATION_NOW_MS = SIMULATION_NOW ? Date.parse(SIMULATION_NOW) : null;
 const SIMULATION_MODE = Boolean(SIMULATION_NOW) && Number.isFinite(SIMULATION_NOW_MS);
@@ -958,6 +971,16 @@ app.post("/hooks/event", async (req, res) => {
     }
 
     const runtimeBody = await sendTelegramMessage(OPENCLAW_TELEGRAM_CHAT_ID, telegramMessage);
+
+    if (currentState != null && currentPhase != null) {
+      try {
+        const dir = path.dirname(NOTIFICATION_STATE_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(NOTIFICATION_STATE_FILE, JSON.stringify({ state: currentState, phase: currentPhase }), "utf8");
+      } catch (err) {
+        console.warn("[bridge:state:persist]", err && err.message ? err.message : err);
+      }
+    }
 
     return res.json({
       status: "ok",
