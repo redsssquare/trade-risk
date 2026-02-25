@@ -765,8 +765,17 @@ setInterval(async () => {
 const BRIDGE_CRON_INTERVAL_MS = Number.parseInt(process.env.BRIDGE_CRON_INTERVAL_MS || "0", 10);
 const bridgeCronEnabled = Number.isFinite(BRIDGE_CRON_INTERVAL_MS) && BRIDGE_CRON_INTERVAL_MS > 0;
 
+const isMoscowWorkingHours = () => {
+  const moscowHour = (new Date().getUTCHours() + 3) % 24;
+  return moscowHour >= 8 && moscowHour < 21;
+};
+
 if (bridgeCronEnabled) {
   const runBridgeCronTick = async () => {
+    if (!isMoscowWorkingHours()) {
+      console.log("[bridge:cron:skip] outside working hours (8-21 MSK)");
+      return;
+    }
     try {
       const baseUrl = "http://127.0.0.1:3000";
       const feedRes = await fetch(`${baseUrl}/calendar-feed`);
@@ -798,6 +807,9 @@ if (bridgeCronEnabled) {
               contextual_anchor_names: result.contextual_anchor_names,
               cluster_has_anchor: result.cluster_has_anchor,
               cluster_anchor_names: result.cluster_anchor_names,
+              cluster_size: result.cluster_size,
+              cluster_events: result.cluster_events,
+              currency: result.currency,
               primary_event: result.primary_event
             };
           })()
