@@ -754,13 +754,14 @@ const sendHeartbeat = async (source = "interval") => {
   return runtimeBody;
 };
 
-setInterval(async () => {
-  try {
-    await sendHeartbeat("interval");
-  } catch (error) {
-    console.error("[bridge:heartbeat:error]", error && error.details ? JSON.stringify(error.details, null, 2) : error);
-  }
-}, HEARTBEAT_INTERVAL_MS);
+// [TIMER DISABLED] Heartbeat interval moved to n8n scheduling.
+// setInterval(async () => {
+//   try {
+//     await sendHeartbeat("interval");
+//   } catch (error) {
+//     console.error("[bridge:heartbeat:error]", error && error.details ? JSON.stringify(error.details, null, 2) : error);
+//   }
+// }, HEARTBEAT_INTERVAL_MS);
 
 const BRIDGE_CRON_INTERVAL_MS = Number.parseInt(process.env.BRIDGE_CRON_INTERVAL_MS || "0", 10);
 const bridgeCronEnabled = Number.isFinite(BRIDGE_CRON_INTERVAL_MS) && BRIDGE_CRON_INTERVAL_MS > 0;
@@ -770,73 +771,75 @@ const isMoscowWorkingHours = () => {
   return moscowHour >= 8 && moscowHour < 21;
 };
 
-if (bridgeCronEnabled) {
-  const runBridgeCronTick = async () => {
-    if (!isMoscowWorkingHours()) {
-      console.log("[bridge:cron:skip] outside working hours (8-21 MSK)");
-      return;
-    }
-    try {
-      const baseUrl = "http://127.0.0.1:3000";
-      const feedRes = await fetch(`${baseUrl}/calendar-feed`);
-      if (!feedRes.ok) return;
-      const feed = await feedRes.json();
-      const items = Array.isArray(feed.items) ? feed.items : [];
-      const nowMs = getEffectiveNowMs();
-      const result = computeFromRawEvents(nowMs, items);
-      const changed =
-        notificationState.previous_state !== result.state ||
-        notificationState.previous_phase !== result.phase;
-      if (!changed) return;
-      const context = result.state === "RED" && result.primary_event
-        ? (() => {
-            const eventMs = Date.parse(result.primary_event.time);
-            const minutesToEvent = Number.isFinite(eventMs)
-              ? (eventMs > nowMs ? Math.max(0, Math.ceil((eventMs - nowMs) / 60000)) : 0)
-              : 0;
-            return {
-              event_name: result.primary_event.name,
-              event_title: result.primary_event.name,
-              event_time: result.primary_event.time,
-              minutes_to_event: minutesToEvent,
-              impact: "High",
-              phase: result.phase,
-              impact_type: result.impact_type,
-              anchor_label: result.anchor_label,
-              contextual_anchor: result.contextual_anchor,
-              contextual_anchor_names: result.contextual_anchor_names,
-              cluster_has_anchor: result.cluster_has_anchor,
-              cluster_anchor_names: result.cluster_anchor_names,
-              cluster_size: result.cluster_size,
-              cluster_events: result.cluster_events,
-              currency: result.currency,
-              primary_event: result.primary_event
-            };
-          })()
-        : null;
-      const body = {
-        event_type: "volatility.state_changed",
-        state: result.state,
-        phase: result.phase,
-        timestamp: new Date(nowMs).toISOString(),
-        context
-      };
-      const hookRes = await fetch(`${baseUrl}/hooks/event`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      if (!hookRes.ok) {
-        console.warn("[bridge:cron:hook_failed]", { status: hookRes.status });
-      }
-    } catch (err) {
-      console.warn("[bridge:cron:error]", err && err.message ? err.message : err);
-    }
-  };
-  setInterval(runBridgeCronTick, BRIDGE_CRON_INTERVAL_MS);
-  setTimeout(runBridgeCronTick, 2000);
-  console.log("[bridge:cron:started]", { interval_ms: BRIDGE_CRON_INTERVAL_MS });
-}
+// [TIMER DISABLED] Bridge internal cron moved to n8n scheduling.
+// Trigger via POST /hooks/event from n8n instead.
+// if (bridgeCronEnabled) {
+//   const runBridgeCronTick = async () => {
+//     if (!isMoscowWorkingHours()) {
+//       console.log("[bridge:cron:skip] outside working hours (8-21 MSK)");
+//       return;
+//     }
+//     try {
+//       const baseUrl = "http://127.0.0.1:3000";
+//       const feedRes = await fetch(`${baseUrl}/calendar-feed`);
+//       if (!feedRes.ok) return;
+//       const feed = await feedRes.json();
+//       const items = Array.isArray(feed.items) ? feed.items : [];
+//       const nowMs = getEffectiveNowMs();
+//       const result = computeFromRawEvents(nowMs, items);
+//       const changed =
+//         notificationState.previous_state !== result.state ||
+//         notificationState.previous_phase !== result.phase;
+//       if (!changed) return;
+//       const context = result.state === "RED" && result.primary_event
+//         ? (() => {
+//             const eventMs = Date.parse(result.primary_event.time);
+//             const minutesToEvent = Number.isFinite(eventMs)
+//               ? (eventMs > nowMs ? Math.max(0, Math.ceil((eventMs - nowMs) / 60000)) : 0)
+//               : 0;
+//             return {
+//               event_name: result.primary_event.name,
+//               event_title: result.primary_event.name,
+//               event_time: result.primary_event.time,
+//               minutes_to_event: minutesToEvent,
+//               impact: "High",
+//               phase: result.phase,
+//               impact_type: result.impact_type,
+//               anchor_label: result.anchor_label,
+//               contextual_anchor: result.contextual_anchor,
+//               contextual_anchor_names: result.contextual_anchor_names,
+//               cluster_has_anchor: result.cluster_has_anchor,
+//               cluster_anchor_names: result.cluster_anchor_names,
+//               cluster_size: result.cluster_size,
+//               cluster_events: result.cluster_events,
+//               currency: result.currency,
+//               primary_event: result.primary_event
+//             };
+//           })()
+//         : null;
+//       const body = {
+//         event_type: "volatility.state_changed",
+//         state: result.state,
+//         phase: result.phase,
+//         timestamp: new Date(nowMs).toISOString(),
+//         context
+//       };
+//       const hookRes = await fetch(`${baseUrl}/hooks/event`, {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify(body)
+//       });
+//       if (!hookRes.ok) {
+//         console.warn("[bridge:cron:hook_failed]", { status: hookRes.status });
+//       }
+//     } catch (err) {
+//       console.warn("[bridge:cron:error]", err && err.message ? err.message : err);
+//     }
+//   };
+//   setInterval(runBridgeCronTick, BRIDGE_CRON_INTERVAL_MS);
+//   setTimeout(runBridgeCronTick, 2000);
+//   console.log("[bridge:cron:started]", { interval_ms: BRIDGE_CRON_INTERVAL_MS });
+// }
 
 app.post("/hooks/event", async (req, res) => {
   const incomingEventType = req.body && req.body.event_type;
