@@ -13,6 +13,7 @@ services:
       - OPENCLAW_RUNTIME_URL=http://openclaw:18789/tools/invoke
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-bridge-runtime-token}
       - OPENCLAW_TELEGRAM_CHAT_ID=${OPENCLAW_TELEGRAM_CHAT_ID:-}
+      - TELEGRAM_TEST_CHANNEL_ID=${TELEGRAM_TEST_CHANNEL_ID:-}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID:-}
       - OPENCLAW_B2_TEST_MESSAGE=[B2 TEST] POST -> bridge -> openclaw -> Telegram
       - AI_ENABLED=${AI_ENABLED:-false}

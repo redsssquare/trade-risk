@@ -25,8 +25,8 @@
       "anchor_label": "US CPI",
       "aliases": [
         "us cpi",
-        "cpi y/y",
-        "cpi m/m",
+        "us cpi m/m",
+        "us cpi y/y",
         "consumer price index"
       ]
     },

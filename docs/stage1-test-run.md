@@ -181,7 +181,7 @@ node scripts/update-test-event.js
 CALENDAR_TEST_MODE=true
 ```
 
-(И `OPENCLAW_TELEGRAM_CHAT_ID`, `OPENCLAW_GATEWAY_TOKEN` и т.д., если ещё не настроены.)
+(И `OPENCLAW_TELEGRAM_CHAT_ID`, `OPENCLAW_GATEWAY_TOKEN` и т.д., если ещё не настроены. Для тестового канала/дайджеста: `TELEGRAM_TEST_CHANNEL_ID`, см. `.env.example`.)
 
 ### 3. Перезапустить стек
 

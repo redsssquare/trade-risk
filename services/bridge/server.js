@@ -5,12 +5,14 @@ const path = require("path");
 const { computeFromRawEvents } = require("./lib/volatility-compute");
 const { classifyImpactTypeForEvent, getClusterAnchorNames } = require("./lib/anchor-event-classifier");
 const { renderTelegramTextTemplate, getDuringEventFirstLine } = require("./render/telegram-render");
+const { formatDailyDigest } = require("./render/digest-format");
 
 const app = express();
 const PORT = 3000;
 const OPENCLAW_RUNTIME_URL = process.env.OPENCLAW_RUNTIME_URL || "http://openclaw:18789/tools/invoke";
 const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 const OPENCLAW_TELEGRAM_CHAT_ID = process.env.OPENCLAW_TELEGRAM_CHAT_ID || "";
+const TELEGRAM_TEST_CHANNEL_ID = process.env.TELEGRAM_TEST_CHANNEL_ID || "";
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "";
 const OPENCLAW_B2_TEST_MESSAGE = process.env.OPENCLAW_B2_TEST_MESSAGE || "[B2 TEST] POST -> bridge -> openclaw -> Telegram";
 const AI_ENABLED = String(process.env.AI_ENABLED || "false").toLowerCase() === "true";
@@ -87,6 +89,85 @@ const calendarCache = {
   fetched_at_ms: null,
   payload: null
 };
+
+/** Returns { dayStartMs, dayEndMs, moscowDateStr } for "today" in Europe/Moscow (UTC+3). */
+function getMoscowDayBounds() {
+  const moscowDateStr = new Date().toLocaleString("en-CA", { timeZone: "Europe/Moscow" }).slice(0, 10);
+  const dayStartMs = new Date(`${moscowDateStr}T00:00:00+03:00`).getTime();
+  const dayEndMs = new Date(`${moscowDateStr}T23:59:59.999+03:00`).getTime();
+  return { dayStartMs, dayEndMs, moscowDateStr };
+}
+
+/** Shared: get calendar items (cache or fetch). Returns { source, fetched_at, items }. */
+async function getCalendarItemsAsync() {
+  const nowMs = Date.now();
+  if (CALENDAR_TEST_MODE) {
+    try {
+      const raw = fs.readFileSync(SIMULATED_DAY_PATH, "utf8");
+      const data = JSON.parse(raw);
+      if (!data || !Array.isArray(data.events)) {
+        throw new Error("invalid_test_feed_shape");
+      }
+      const currencyFromTitle = (title) => {
+        if (!title || typeof title !== "string") return "USD";
+        const m = title.match(/^\s*(USD|EUR|GBP|JPY|AUD|CAD|CHF|NZD|CNY)\b/i);
+        return m ? m[1].toUpperCase() : (title.match(/\b(FOMC|Fed|NFP|Nonfarm|CPI|ISM)\b/i) ? "USD" : "USD");
+      };
+      const items = data.events
+        .filter((entry) =>
+          entry &&
+          typeof entry.name === "string" &&
+          typeof entry.time === "string" &&
+          typeof entry.impact === "string")
+        .map((entry) => ({
+          title: entry.name,
+          country: entry.country || currencyFromTitle(entry.name),
+          date: entry.time,
+          impact: entry.impact,
+          forecast: "",
+          previous: ""
+        }));
+      return { source: "test_file", fetched_at: new Date(nowMs).toISOString(), items };
+    } catch (error) {
+      throw new Error(error && error.message ? error.message : "test_feed_read_failed");
+    }
+  }
+  const hasFreshCache = Array.isArray(calendarCache.payload) &&
+    Number.isFinite(calendarCache.fetched_at_ms) &&
+    nowMs - calendarCache.fetched_at_ms < CALENDAR_CACHE_TTL_MS;
+  if (hasFreshCache) {
+    return {
+      source: "cache",
+      fetched_at: new Date(calendarCache.fetched_at_ms).toISOString(),
+      items: calendarCache.payload
+    };
+  }
+  try {
+    const response = await fetch(CALENDAR_URL, { method: "GET", headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`http_status_${response.status}`);
+    const payload = await response.json();
+    if (!Array.isArray(payload)) throw new Error("invalid_json_shape:not_array");
+    calendarCache.payload = payload;
+    calendarCache.fetched_at_ms = nowMs;
+    return { source: "live", fetched_at: new Date(nowMs).toISOString(), items: payload };
+  } catch (error) {
+    if (Array.isArray(calendarCache.payload)) {
+      return {
+        source: "stale_cache",
+        fetched_at: Number.isFinite(calendarCache.fetched_at_ms) ? new Date(calendarCache.fetched_at_ms).toISOString() : null,
+        items: calendarCache.payload,
+        warning: error && error.message ? error.message : "calendar_fetch_failed"
+      };
+    }
+    const fallbackEventTimeIso = new Date(nowMs + 12 * 60 * 1000).toISOString();
+    return {
+      source: "fallback_synthetic",
+      fetched_at: new Date(nowMs).toISOString(),
+      items: [{ title: "Bridge Fallback Event", country: "US", date: fallbackEventTimeIso, impact: "High", forecast: "", previous: "" }],
+      warning: error && error.message ? error.message : "calendar_fetch_failed"
+    };
+  }
+}
 const simulationClockState = {
   start_time: null,
   simulation_speed: null,
@@ -128,109 +209,127 @@ app.get("/simulation-config", (_req, res) => {
 });
 
 app.get("/calendar-feed", async (_req, res) => {
-  const nowMs = Date.now();
-
-  if (CALENDAR_TEST_MODE) {
-    try {
-      const raw = fs.readFileSync(SIMULATED_DAY_PATH, "utf8");
-      const data = JSON.parse(raw);
-      if (!data || !Array.isArray(data.events)) {
-        return res.status(500).json({ error: "invalid_test_feed_shape" });
-      }
-      const currencyFromTitle = (title) => {
-        if (!title || typeof title !== "string") return "USD";
-        const m = title.match(/^\s*(USD|EUR|GBP|JPY|AUD|CAD|CHF|NZD|CNY)\b/i);
-        return m ? m[1].toUpperCase() : (title.match(/\b(FOMC|Fed|NFP|Nonfarm|CPI|ISM)\b/i) ? "USD" : "USD");
-      };
-      const items = data.events
-        .filter((entry) =>
-          entry &&
-          typeof entry.name === "string" &&
-          typeof entry.time === "string" &&
-          typeof entry.impact === "string")
-        .map((entry) => ({
-          title: entry.name,
-          country: entry.country || currencyFromTitle(entry.name),
-          date: entry.time,
-          impact: entry.impact,
-          forecast: "",
-          previous: ""
-        }));
-
-      return res.json({
-        source: "test_file",
-        fetched_at: new Date(nowMs).toISOString(),
-        items
-      });
-    } catch (error) {
-      return res.status(500).json({
-        error: error && error.message ? error.message : "test_feed_read_failed"
-      });
-    }
-  }
-
-  const hasFreshCache = Array.isArray(calendarCache.payload) &&
-    Number.isFinite(calendarCache.fetched_at_ms) &&
-    nowMs - calendarCache.fetched_at_ms < CALENDAR_CACHE_TTL_MS;
-
-  if (hasFreshCache) {
-    return res.json({
-      source: "cache",
-      fetched_at: new Date(calendarCache.fetched_at_ms).toISOString(),
-      items: calendarCache.payload
-    });
-  }
-
   try {
-    const response = await fetch(CALENDAR_URL, {
-      method: "GET",
-      headers: { Accept: "application/json" }
-    });
-    if (!response.ok) {
-      throw new Error(`http_status_${response.status}`);
-    }
-    const payload = await response.json();
-    if (!Array.isArray(payload)) {
-      throw new Error("invalid_json_shape:not_array");
-    }
-
-    calendarCache.payload = payload;
-    calendarCache.fetched_at_ms = nowMs;
-
+    const result = await getCalendarItemsAsync();
     return res.json({
-      source: "live",
-      fetched_at: new Date(nowMs).toISOString(),
-      items: payload
+      source: result.source,
+      fetched_at: result.fetched_at,
+      items: result.items,
+      ...(result.warning && { warning: result.warning })
     });
   } catch (error) {
-    const fallbackEventTimeIso = new Date(nowMs + 12 * 60 * 1000).toISOString();
-    const fallbackItems = [
-      {
-        title: "Bridge Fallback Event",
-        country: "US",
-        date: fallbackEventTimeIso,
-        impact: "High",
-        forecast: "",
-        previous: ""
-      }
-    ];
+    return res.status(500).json({
+      error: error && error.message ? error.message : "calendar_feed_failed"
+    });
+  }
+});
 
-    if (Array.isArray(calendarCache.payload)) {
-      return res.json({
-        source: "stale_cache",
-        fetched_at: Number.isFinite(calendarCache.fetched_at_ms)
-          ? new Date(calendarCache.fetched_at_ms).toISOString()
-          : null,
-        items: calendarCache.payload,
-        warning: error && error.message ? error.message : "calendar_fetch_failed"
+/** GET /today-events — high-impact + anchor events for current day (MSK). Uses calendar from cache/fetch, classifyImpactTypeForEvent for anchor. */
+app.get("/today-events", async (_req, res) => {
+  try {
+    const { source, fetched_at, items } = await getCalendarItemsAsync();
+    const { dayStartMs, dayEndMs, moscowDateStr } = getMoscowDayBounds();
+    const dayStartIso = new Date(dayStartMs).toISOString();
+    const dayEndIso = new Date(dayEndMs).toISOString();
+
+    const highImpactOnly = (Array.isArray(items) ? items : [])
+      .filter((item) => item && typeof item.date === "string" && normalizeText(item.impact || "") === "high");
+    const todayEvents = highImpactOnly.filter((item) => {
+      const eventMs = Date.parse(item.date);
+      return Number.isFinite(eventMs) && eventMs >= dayStartMs && eventMs <= dayEndMs;
+    });
+
+    const withAnchor = todayEvents.map((item) => {
+      const { impact_type, anchor_label } = classifyImpactTypeForEvent({
+        title: item.title || "",
+        impact: item.impact || ""
+      });
+      return {
+        ...item,
+        impact_type: impact_type || "high",
+        anchor_label: anchor_label || null,
+        is_anchor: impact_type === "anchor_high"
+      };
+    });
+
+    return res.json({
+      date_msk: moscowDateStr,
+      day_start_iso: dayStartIso,
+      day_end_iso: dayEndIso,
+      calendar_source: source,
+      calendar_fetched_at: fetched_at,
+      events: withAnchor
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: error && error.message ? error.message : "today_events_failed"
+    });
+  }
+});
+
+/** POST /daily-digest: календарь (тело { items } или фетч), фильтр сегодня MSK + high + якорные, текст по шаблону, отправка в TELEGRAM_TEST_CHANNEL_ID. */
+app.post("/daily-digest", async (req, res) => {
+  try {
+    let items;
+    let calendarSource = "body";
+    if (req.body && Array.isArray(req.body.items) && req.body.items.length >= 0) {
+      items = req.body.items;
+    }
+    if (items === undefined) {
+      const result = await getCalendarItemsAsync();
+      items = result.items || [];
+      calendarSource = result.source || "live";
+    }
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ status: "error", error: "items must be an array or omit to use calendar feed" });
+    }
+
+    const { dayStartMs, dayEndMs, moscowDateStr } = getMoscowDayBounds();
+    const highImpactOnly = items.filter(
+      (item) => item && typeof item.date === "string" && normalizeText(item.impact || "") === "high"
+    );
+    const todayEvents = highImpactOnly.filter((item) => {
+      const eventMs = Date.parse(item.date);
+      return Number.isFinite(eventMs) && eventMs >= dayStartMs && eventMs <= dayEndMs;
+    });
+
+    const withAnchor = todayEvents.map((item) => {
+      const { impact_type, anchor_label } = classifyImpactTypeForEvent({
+        title: item.title || "",
+        impact: item.impact || ""
+      });
+      return {
+        ...item,
+        impact_type: impact_type || "high",
+        anchor_label: anchor_label || null,
+        is_anchor: impact_type === "anchor_high"
+      };
+    });
+
+    const text = formatDailyDigest(withAnchor, { moscowDateStr });
+
+    if (!TELEGRAM_TEST_CHANNEL_ID || !TELEGRAM_TEST_CHANNEL_ID.trim()) {
+      return res.status(503).json({
+        status: "error",
+        error: "TELEGRAM_TEST_CHANNEL_ID is not configured; digest is not sent to avoid posting to main channel"
       });
     }
 
+    await sendTelegramMessage(TELEGRAM_TEST_CHANNEL_ID.trim(), text);
+
     return res.json({
-      source: "fallback_synthetic",
-      fetched_at: new Date(nowMs).toISOString(),
-      items: fallbackItems,
-      warning: error && error.message ? error.message : "calendar_fetch_failed"
+      status: "ok",
+      meta: {
+        eventsCount: withAnchor.length,
+        sent: true,
+        calendar_source: calendarSource
+      }
+    });
+  } catch (error) {
+    console.error("[bridge:daily-digest:error]", error && error.message ? error.message : error);
+    return res.status(500).json({
+      status: "error",
+      error: error && error.message ? error.message : "daily_digest_failed"
     });
   }
 });
