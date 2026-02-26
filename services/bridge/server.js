@@ -308,14 +308,14 @@ app.post("/daily-digest", async (req, res) => {
 
     const text = formatDailyDigest(withAnchor, { moscowDateStr });
 
-    if (!TELEGRAM_TEST_CHANNEL_ID || !TELEGRAM_TEST_CHANNEL_ID.trim()) {
+    if (!OPENCLAW_TELEGRAM_CHAT_ID || !OPENCLAW_TELEGRAM_CHAT_ID.trim()) {
       return res.status(503).json({
         status: "error",
-        error: "TELEGRAM_TEST_CHANNEL_ID is not configured; digest is not sent to avoid posting to main channel"
+        error: "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
       });
     }
 
-    await sendTelegramMessage(TELEGRAM_TEST_CHANNEL_ID.trim(), text);
+    await sendTelegramMessage(OPENCLAW_TELEGRAM_CHAT_ID.trim(), text);
 
     return res.json({
       status: "ok",

@@ -34,7 +34,7 @@ const renderTelegramTextTemplate = (payload, opts) => {
 
   if (phase === "pre_event") {
     return renderPhrase(PRE_EVENT, "pre", category, payload, { appendCurrencies: true })
-      || `⚠️ Через ${payload.minutes_to_event || 0} минут публикация важных экономических данных.`;
+      || `⏳ Через ${payload.minutes_to_event || 0} минут публикация важных экономических данных.`;
   }
   if (phase === "during_event") {
     return renderPhrase(DURING_EVENT, "dur", category, payload)
@@ -46,7 +46,7 @@ const renderTelegramTextTemplate = (payload, opts) => {
   }
 
   return renderPhrase(PRE_EVENT, "pre", category, payload)
-    || "⚠️ Активно окно волатильности.";
+    || "📊 Активно окно волатильности.";
 };
 
 const getDuringEventFirstLine = (payload) => {

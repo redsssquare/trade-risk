@@ -11,7 +11,7 @@ const getEventName = (payload) => {
 };
 
 const renderAnchorHighDuringEvent = (payload) =>
-  `Опубликованы данные ${getEventName(payload)}.`;
+  `Публикуется ${getEventName(payload)}.`;
 
 const renderAnchorHighPreEvent = (payload) => {
   const minutes = getSafeMinutes(payload);
@@ -21,13 +21,13 @@ const renderAnchorHighPreEvent = (payload) => {
     : 0;
 
   if (clusterSize > 1) {
-    return `🔴 Через ${minutes} минут выходит серия важных публикаций, включая ${eventName}.`;
+    return `⚡ Через ${minutes} минут серия публикаций, включая ${eventName}.`;
   }
-  return `🔴 Через ${minutes} минут выходит публикация ${eventName}.`;
+  return `⚡ Через ${minutes} минут выходит ${eventName}.`;
 };
 
 const renderAnchorHighPostEvent = (payload) =>
-  `🔴 Публикация ${getEventName(payload)} уже состоялась. Рынок переваривает данные.`;
+  `🕒 ${getEventName(payload)} вышел. Рынок переваривает данные.`;
 
 const renderAnchorHighTemplate = (payload) => {
   const phase = String(payload && payload.phase ? payload.phase : "none").trim();
@@ -35,7 +35,7 @@ const renderAnchorHighTemplate = (payload) => {
   if (phase === "during_event") {
     return [
       renderAnchorHighDuringEvent(payload),
-      "Рынок реагирует нейтрально, выраженного импульса не наблюдается."
+      "Рынок начинает реагировать."
     ].join("\n");
   }
   if (phase === "pre_event") {
@@ -44,7 +44,7 @@ const renderAnchorHighTemplate = (payload) => {
   if (phase === "post_event") {
     return renderAnchorHighPostEvent(payload);
   }
-  return `🔴 Активно окно волатильности: ${getEventName(payload)}.`;
+  return `⚡ Рынок реагирует на ${getEventName(payload)}.`;
 };
 
 module.exports = {

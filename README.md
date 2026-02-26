@@ -26,6 +26,8 @@
 4. `Send to Bridge` -> `POST http://bridge:3000/hooks/event`
 5. Bridge -> OpenClaw -> Telegram
 
+**Daily digest:** отправляется только в тестовый канал. Задайте **TELEGRAM_TEST_CHANNEL_ID** (ID тестового чата/канала в Telegram) и при необходимости **OPENCLAW_GATEWAY_TOKEN**. Основной канал (OPENCLAW_TELEGRAM_CHAT_ID) для дайджеста не используется. Проверка пяти кейсов (пустой день, обычные события, якорь, кластер, кластер+якорь): [docs/daily-digest-test-cases.md](docs/daily-digest-test-cases.md), скрипт `scripts/send-daily-digest-test-cases.js`.
+
 Ключевые файлы:
 - `n8n-volatility-window-workflow.json` (единственный workflow-файл)
 - `services/bridge/server.js`, `services/bridge/render/` (шаблоны high/anchor_high)
