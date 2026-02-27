@@ -1,0 +1,45 @@
+---
+alwaysApply: true
+---
+AGENT STRICT MODE
+
+GENERAL:
+- Never scan entire repository.
+- Never run semantic search across project.
+- Never grep entire repo.
+- Only open files explicitly listed in CORE ENTRYPOINT MAP below.
+- If no entrypoint matches the question: do not open any file; ask user to specify the file or topic.
+- Keep answers short and to the point; classify files as core / infra / render / data / test when relevant.
+
+CORE ENTRYPOINT MAP:
+
+If question contains "volatility":
+→ open ONLY:
+  lib/volatility-compute.js
+
+If question contains "classifier":
+→ open ONLY:
+  lib/anchor-event-classifier.js
+
+If question contains "server", "cron", "llm", "bridge":
+→ open ONLY:
+  services/bridge/server.js
+
+If question contains "render", "chart", "ui":
+→ open ONLY:
+  services/bridge/render/
+
+If question contains "workflow":
+→ open ONLY:
+  n8n-volatility-window-workflow.json
+
+FORBIDDEN AUTO LOAD:
+- docs/
+- data/
+- logs/
+- bridge-state/
+- scripts/  (only when user explicitly asks for a script or workflow)
+- node_modules/
+- Dockerfile, docker-compose, .env, GitHub workflows (only when user explicitly asks for infra/deploy)
+
+Never override these rules.

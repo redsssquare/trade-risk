@@ -6,6 +6,7 @@ const { computeFromRawEvents } = require("./lib/volatility-compute");
 const { classifyImpactTypeForEvent, getClusterAnchorNames } = require("./lib/anchor-event-classifier");
 const { renderTelegramTextTemplate, getDuringEventFirstLine } = require("./render/telegram-render");
 const { formatDailyDigest } = require("./render/digest-format");
+const { formatWeeklyEnd, validateWeeklyEnd } = require("./render/weekly-end-format");
 
 const app = express();
 const PORT = 3000;
@@ -330,6 +331,63 @@ app.post("/daily-digest", async (req, res) => {
     return res.status(500).json({
       status: "error",
       error: error && error.message ? error.message : "daily_digest_failed"
+    });
+  }
+});
+
+/** POST /weekly-digest: принимает готовый JSON спекы (week_range, high_events, anchor_events, clusters, total_window_minutes, active_days, quiet_days_count[, busy_day_bonus]), форматирует и отправляет в Telegram. */
+function isWeeklyDigestPayload(body) {
+  if (!body || typeof body !== "object") return false;
+  return (
+    typeof body.week_range === "string" &&
+    Number.isFinite(Number(body.high_events)) &&
+    Number.isFinite(Number(body.anchor_events)) &&
+    Number.isFinite(Number(body.clusters)) &&
+    Number.isFinite(Number(body.total_window_minutes)) &&
+    Array.isArray(body.active_days) &&
+    Number.isFinite(Number(body.quiet_days_count))
+  );
+}
+
+app.post("/weekly-digest", async (req, res) => {
+  try {
+    const payload = req.body;
+    if (!isWeeklyDigestPayload(payload)) {
+      return res.status(400).json({
+        status: "error",
+        error: "Invalid payload: required week_range, high_events, anchor_events, clusters, total_window_minutes, active_days, quiet_days_count"
+      });
+    }
+
+    if (!OPENCLAW_TELEGRAM_CHAT_ID || !OPENCLAW_TELEGRAM_CHAT_ID.trim()) {
+      return res.status(503).json({
+        status: "error",
+        error: "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
+      });
+    }
+
+    const text = formatWeeklyEnd(payload);
+    const validation = validateWeeklyEnd(payload, text);
+    if (!validation.ok) {
+      console.warn("[bridge:weekly-digest:validation]", validation.reason, { payload: { week_range: payload.week_range } });
+      return res.status(400).json({
+        status: "error",
+        error: "Validation failed before send",
+        reason: validation.reason
+      });
+    }
+
+    await sendTelegramMessage(OPENCLAW_TELEGRAM_CHAT_ID.trim(), text);
+
+    return res.json({
+      status: "ok",
+      meta: { sent: true }
+    });
+  } catch (error) {
+    console.error("[bridge:weekly-digest:error]", error && error.message ? error.message : error);
+    return res.status(500).json({
+      status: "error",
+      error: error && error.message ? error.message : "weekly_digest_failed"
     });
   }
 });
