@@ -7,6 +7,8 @@ const { classifyImpactTypeForEvent, getClusterAnchorNames } = require("./lib/anc
 const { renderTelegramTextTemplate, getDuringEventFirstLine } = require("./render/telegram-render");
 const { formatDailyDigest } = require("./render/digest-format");
 const { formatWeeklyEnd, validateWeeklyEnd } = require("./render/weekly-end-format");
+const { formatWeeklyAhead, validateWeeklyAhead } = require("./render/weekly-ahead-format");
+const { isWeeklyAheadPayload } = require("./render/weekly-ahead-payload");
 
 const app = express();
 const PORT = 3000;
@@ -388,6 +390,54 @@ app.post("/weekly-digest", async (req, res) => {
     return res.status(500).json({
       status: "error",
       error: error && error.message ? error.message : "weekly_digest_failed"
+    });
+  }
+});
+
+/** POST /weekly-ahead: спекы как у weekly-digest + опционально high_events_per_day; форматирует и отправляет в TELEGRAM_TEST_CHANNEL_ID (временно). */
+app.post("/weekly-ahead", async (req, res) => {
+  try {
+    const payload = req.body;
+    if (!isWeeklyAheadPayload(payload)) {
+      return res.status(400).json({
+        status: "error",
+        error: "Invalid payload: required week_range, high_events, anchor_events, clusters, total_window_minutes, active_days, quiet_days_count; optional high_events_per_day (array of 5 numbers)"
+      });
+    }
+
+    if (!TELEGRAM_TEST_CHANNEL_ID || !TELEGRAM_TEST_CHANNEL_ID.trim()) {
+      return res.status(503).json({
+        status: "error",
+        error: "TELEGRAM_TEST_CHANNEL_ID is not configured"
+      });
+    }
+
+    const text = formatWeeklyAhead(payload);
+    const validation = validateWeeklyAhead(payload, text);
+    if (!validation.ok) {
+      console.warn("[bridge:weekly-ahead:validation]", validation.reason, { payload: { week_range: payload.week_range } });
+      return res.status(400).json({
+        status: "error",
+        error: "Validation failed before send",
+        reason: validation.reason
+      });
+    }
+
+    const targetChatId = TELEGRAM_TEST_CHANNEL_ID.trim();
+    console.log("[bridge:weekly-ahead:send] target=" + (targetChatId ? targetChatId.slice(-6) + " (…)" : "MISSING"));
+    await sendTelegramMessage(targetChatId, text);
+
+    return res.json({
+      status: "ok",
+      meta: { sent: true }
+    });
+  } catch (error) {
+    const details = error && error.details ? error.details : null;
+    console.error("[bridge:weekly-ahead:error]", error && error.message ? error.message : error, details || "");
+    return res.status(500).json({
+      status: "error",
+      error: error && error.message ? error.message : "weekly_ahead_failed",
+      ...(details && { details })
     });
   }
 });

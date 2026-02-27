@@ -313,7 +313,7 @@ function formatDailyDigest(events, opts = {}) {
     const group = byTime.get(t);
     const title = translateTitle((group[0].title || "").trim()) || "Публикация данных";
     const country = (group[0].country || "USD").trim().toUpperCase();
-    const geo = `${currencyToFlag(country)} (${country})`;
+    const geo = `${currencyToFlag(country)} ${country}`;
 
     if (group.length > 1) {
       const isAnchorCluster = hasAnchor && group.some((x) => x.is_anchor);
