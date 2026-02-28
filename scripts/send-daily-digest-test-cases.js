@@ -17,37 +17,54 @@ function getMoscowDateStr() {
 
 function buildPayloads(moscowDateStr) {
   const d = moscowDateStr;
-  const t1 = `${d}T10:00:00+03:00`;
-  const t2 = `${d}T11:00:00+03:00`;
-  const tCluster = `${d}T14:00:00+03:00`;
+  const t10 = `${d}T10:00:00+03:00`;
+  const t11 = `${d}T11:00:00+03:00`;
+  const t12 = `${d}T12:00:00+03:00`;
+  const t14 = `${d}T14:00:00+03:00`;
+  const t16 = `${d}T16:00:00+03:00`;
+  const t18 = `${d}T18:00:00+03:00`;
 
   return [
     { name: "Кейс 1 — нет событий", items: [] },
     {
       name: "Кейс 2 — обычные события",
       items: [
-        { title: "Retail Sales", date: t1, impact: "High", country: "USD" },
-        { title: "Unemployment Claims", date: t2, impact: "High", country: "USD" }
+        { title: "Retail Sales", date: t10, impact: "High", country: "USD" },
+        { title: "Unemployment Claims", date: t11, impact: "High", country: "USD" },
+        { title: "Core CPI", date: t12, impact: "High", country: "USD" },
+        { title: "ISM Manufacturing", date: t14, impact: "High", country: "USD" },
+        { title: "Consumer Confidence", date: t16, impact: "High", country: "USD" },
+        { title: "Building Permits", date: t18, impact: "High", country: "USD" }
       ]
     },
     {
       name: "Кейс 3 — якорное событие",
       items: [
-        { title: "FOMC Rate Decision", date: tCluster, impact: "High", country: "USD" }
+        { title: "Retail Sales", date: t10, impact: "High", country: "USD" },
+        { title: "Unemployment Claims", date: t11, impact: "High", country: "USD" },
+        { title: "FOMC Rate Decision", date: t14, impact: "High", country: "USD" },
+        { title: "Consumer Confidence", date: t16, impact: "High", country: "USD" }
       ]
     },
     {
       name: "Кейс 4 — кластер без якоря",
       items: [
-        { title: "Retail Sales", date: tCluster, impact: "High", country: "USD" },
-        { title: "Unemployment Claims", date: tCluster, impact: "High", country: "USD" }
+        { title: "Retail Sales", date: t10, impact: "High", country: "USD" },
+        { title: "Unemployment Claims", date: t10, impact: "High", country: "USD" },
+        { title: "Core PPI", date: t10, impact: "High", country: "USD" },
+        { title: "ISM Manufacturing", date: t14, impact: "High", country: "USD" },
+        { title: "Trade Balance", date: t14, impact: "High", country: "USD" },
+        { title: "Building Permits", date: t18, impact: "High", country: "USD" }
       ]
     },
     {
       name: "Кейс 5 — кластер + якорь",
       items: [
-        { title: "FOMC Rate Decision", date: tCluster, impact: "High", country: "USD" },
-        { title: "Preliminary PMI", date: tCluster, impact: "High", country: "USD" }
+        { title: "Retail Sales", date: t10, impact: "High", country: "USD" },
+        { title: "FOMC Rate Decision", date: t14, impact: "High", country: "USD" },
+        { title: "Preliminary PMI", date: t14, impact: "High", country: "USD" },
+        { title: "Core CPI", date: t14, impact: "High", country: "USD" },
+        { title: "Consumer Confidence", date: t16, impact: "High", country: "USD" }
       ]
     }
   ];

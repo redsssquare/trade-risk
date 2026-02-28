@@ -95,16 +95,16 @@ function checkForbiddenWords(text) {
   return WEEKLY_AHEAD_FORBIDDEN_WORDS.find((word) => normalized.includes(word));
 }
 
-/** Проверка: только 📊 в тексте (как в Weekly End). */
+/** Проверка: только 📆 (заголовок) и цифры в эмодзи-позициях (как в Weekly End). */
 function hasOnlyAllowedEmoji(text) {
   if (!text || typeof text !== "string") return true;
   const emojiMatches = text.match(/\p{Emoji}/gu);
   if (!emojiMatches || emojiMatches.length === 0) return true;
-  const CHART = 0x1f4ca;
+  const CALENDAR = 0x1f4c5; // 📆
   const ASCII_DIGITS = new Set([0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]);
   return emojiMatches.every((e) => {
     const cp = e.codePointAt(0);
-    return cp === CHART || ASCII_DIGITS.has(cp);
+    return cp === CALENDAR || ASCII_DIGITS.has(cp);
   });
 }
 
@@ -207,7 +207,8 @@ function formatWeeklyAhead(payload) {
   } else if (anchorEvents === 2) {
     metricLines.push(ANCHOR_TWO_PHRASES[v % ANCHOR_TWO_PHRASES.length] || ANCHOR_TWO_PHRASES[0]);
   } else {
-    metricLines.push((ANCHOR_MANY_PHRASES[0] || "{n} ключевых событий.").replace("{n}", String(anchorEvents)));
+    const manyPhrase = ANCHOR_MANY_PHRASES[v % ANCHOR_MANY_PHRASES.length] || ANCHOR_MANY_PHRASES[0];
+    metricLines.push(manyPhrase.replace("{n}", String(anchorEvents)));
   }
   if (clusters === 0) {
     metricLines.push(CLUSTERS_ZERO_PHRASES[v % CLUSTERS_ZERO_PHRASES.length] || CLUSTERS_ZERO_PHRASES[0]);

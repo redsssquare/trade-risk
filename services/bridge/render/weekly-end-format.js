@@ -13,6 +13,7 @@ const {
   ANCHOR_ZERO_PHRASES,
   ANCHOR_ONE_PHRASES,
   ANCHOR_TWO_PHRASES,
+  ANCHOR_MANY_PHRASES,
   CLUSTERS_ZERO_PHRASES,
   CLUSTERS_ONE_PHRASES,
   CLUSTERS_TWO_PHRASES,
@@ -22,7 +23,7 @@ const {
   DISTRIBUTION_MANY_PHRASES,
   WINDOW_LINE,
   QUIET_NOTE,
-  CLOSING,
+  CLOSING_PHRASES,
   LEVEL_CALM,
   LEVEL_MODERATE,
   LEVEL_SATURATED,
@@ -107,16 +108,16 @@ function checkForbiddenWords(text) {
   return WEEKLY_FORBIDDEN_WORDS.find((word) => normalized.includes(word));
 }
 
-/** Проверка: только 📊 (U+1F4CA) в тексте. В JS \p{Emoji} матчит и цифры — их не считаем за «лишние» эмодзи. */
+/** Проверка: только 📆 (U+1F4C5) в заголовке. В JS \p{Emoji} матчит и цифры — их не считаем за «лишние» эмодзи. */
 function hasOnlyAllowedEmoji(text) {
   if (!text || typeof text !== "string") return true;
   const emojiMatches = text.match(/\p{Emoji}/gu);
   if (!emojiMatches || emojiMatches.length === 0) return true;
-  const CHART = 0x1f4ca;
+  const CALENDAR = 0x1f4c5; // 📆
   const ASCII_DIGITS = new Set([0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]);
   return emojiMatches.every((e) => {
     const cp = e.codePointAt(0);
-    return cp === CHART || ASCII_DIGITS.has(cp);
+    return cp === CALENDAR || ASCII_DIGITS.has(cp);
   });
 }
 
@@ -237,16 +238,15 @@ function formatWeeklyEnd(payload) {
   } else if (anchorEvents === 2) {
     metricLines.push(ANCHOR_TWO_PHRASES[v] != null ? ANCHOR_TWO_PHRASES[v] : ANCHOR_TWO_PHRASES[0]);
   } else {
-    metricLines.push(`${anchorEvents} ключевых событий.`);
+    const manyPhrase = ANCHOR_MANY_PHRASES[v] != null ? ANCHOR_MANY_PHRASES[v] : ANCHOR_MANY_PHRASES[0];
+    metricLines.push(manyPhrase.replace("{n}", String(anchorEvents)));
   }
   if (clusters === 0) {
     metricLines.push(CLUSTERS_ZERO_PHRASES[v] != null ? CLUSTERS_ZERO_PHRASES[v] : CLUSTERS_ZERO_PHRASES[0]);
   } else if (clusters === 1) {
     metricLines.push(CLUSTERS_ONE_PHRASES[v] != null ? CLUSTERS_ONE_PHRASES[v] : CLUSTERS_ONE_PHRASES[0]);
-  } else if (clusters === 2) {
-    metricLines.push(CLUSTERS_TWO_PHRASES[v] != null ? CLUSTERS_TWO_PHRASES[v] : CLUSTERS_TWO_PHRASES[0]);
   } else {
-    metricLines.push(`${clusters} плотных новостных интервалов.`);
+    metricLines.push(CLUSTERS_TWO_PHRASES[v] != null ? CLUSTERS_TWO_PHRASES[v] : CLUSTERS_TWO_PHRASES[0]);
   }
   blocks.push(metricLines.join("\n"));
 
@@ -270,7 +270,7 @@ function formatWeeklyEnd(payload) {
   blocks.push(distributionLines.join("\n"));
 
   // Блок 5: закрытие
-  blocks.push(CLOSING);
+  blocks.push(CLOSING_PHRASES[v % CLOSING_PHRASES.length] || CLOSING_PHRASES[0]);
 
   const text = blocks.join("\n\n").trim();
   const lines = text.split("\n").filter((s) => s.trim().length > 0);

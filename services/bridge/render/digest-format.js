@@ -8,16 +8,10 @@ const {
   DIGEST_HEADER,
   DIGEST_EMPTY_BODY,
   DIGEST_EVENT_LINE,
-  DIGEST_REGULAR_CLOSING,
   DIGEST_ANCHOR_EVENT_LINE,
-  DIGEST_ANCHOR_HIGHLIGHT,
-  DIGEST_ANCHOR_CLOSING,
   DIGEST_CLUSTER_EVENT_LINE,
-  DIGEST_CLUSTER_EVENT_LINE_SECOND,
-  DIGEST_CLUSTER_CLOSING,
   DIGEST_CLUSTER_ANCHOR_EVENT_LINE,
-  DIGEST_CLUSTER_ANCHOR_HIGHLIGHT,
-  DIGEST_CLUSTER_ANCHOR_CLOSING,
+  DIGEST_CLOSING,
 } = require("./digest-phrases");
 
 const CURRENCY_TO_COUNTRY = {
@@ -305,9 +299,7 @@ function formatDailyDigest(events, opts = {}) {
     byTime.get(t).push(e);
   }
 
-  const hasCluster = [...byTime.values()].some((g) => g.length > 1);
   const sortedTimes = [...byTime.keys()].sort();
-  let clusterLineIndex = 0;
 
   for (const t of sortedTimes) {
     const group = byTime.get(t);
@@ -317,16 +309,9 @@ function formatDailyDigest(events, opts = {}) {
 
     if (group.length > 1) {
       const isAnchorCluster = hasAnchor && group.some((x) => x.is_anchor);
-      let pool = isAnchorCluster ? DIGEST_CLUSTER_ANCHOR_EVENT_LINE : DIGEST_CLUSTER_EVENT_LINE;
-      if (!isAnchorCluster && clusterLineIndex > 0 && DIGEST_CLUSTER_EVENT_LINE_SECOND && DIGEST_CLUSTER_EVENT_LINE_SECOND.length > 0) {
-        pool = DIGEST_CLUSTER_EVENT_LINE_SECOND;
-      }
-      const template = Array.isArray(pool)
-        ? pickFromPool(`${t}_${clusterLineIndex}`, pool)
-        : pool;
-      const line = String(template).replace("{time}", t).replace("{geo}", geo);
+      const template = isAnchorCluster ? DIGEST_CLUSTER_ANCHOR_EVENT_LINE : DIGEST_CLUSTER_EVENT_LINE;
+      const line = template.replace("{time}", t).replace("{count}", group.length).replace("{geo}", geo);
       lines.push(line);
-      clusterLineIndex++;
     } else {
       const template = group[0].is_anchor ? DIGEST_ANCHOR_EVENT_LINE : DIGEST_EVENT_LINE;
       lines.push(template.replace("{time}", t).replace("{title}", title).replace("{geo}", geo));
@@ -335,24 +320,7 @@ function formatDailyDigest(events, opts = {}) {
 
   const header = DIGEST_HEADER.replace("{date}", date);
   const bodyLines = [header, "", ...lines];
-
-  if (hasAnchor && hasCluster && anchorTime) {
-    const highlight = pickFromPool(anchorTime, DIGEST_CLUSTER_ANCHOR_HIGHLIGHT).replace(/\{anchor_time\}/g, anchorTime);
-    bodyLines.push("", highlight);
-    const closing = pickFromPool("cluster_anchor", DIGEST_CLUSTER_ANCHOR_CLOSING);
-    bodyLines.push("", closing);
-  } else if (hasAnchor && anchorTime) {
-    const highlight = pickFromPool(anchorTime, DIGEST_ANCHOR_HIGHLIGHT).replace("{anchor_time}", anchorTime);
-    bodyLines.push("", highlight);
-    const closing = pickFromPool("anchor", DIGEST_ANCHOR_CLOSING);
-    bodyLines.push("", closing);
-  } else if (hasCluster) {
-    const closing = pickFromPool("cluster", DIGEST_CLUSTER_CLOSING);
-    bodyLines.push("", closing);
-  } else {
-    const closing = pickFromPool("regular", DIGEST_REGULAR_CLOSING);
-    bodyLines.push("", closing);
-  }
+  bodyLines.push("", DIGEST_CLOSING);
 
   return bodyLines.join("\n").trim();
 }

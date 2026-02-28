@@ -39,7 +39,7 @@ const renderHighPreEvent = (payload) => {
 };
 
 const renderHighPostEvent = () => [
-  "🕒 Данные вышли.",
+  "Данные вышли.",
   "Рынок переваривает публикацию."
 ].join(" ");
 
@@ -55,7 +55,7 @@ const renderHighTemplate = (payload) => {
   if (phase === "post_event") {
     return renderHighPostEvent();
   }
-  return "📊 Рынок в активной фазе.";
+  return "Рынок в активной фазе.";
 };
 
 module.exports = {

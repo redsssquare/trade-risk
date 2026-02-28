@@ -38,15 +38,15 @@ const renderTelegramTextTemplate = (payload, opts) => {
   }
   if (phase === "during_event") {
     return renderPhrase(DURING_EVENT, "dur", category, payload)
-      || "📊 Выходят данные.\nДвижения ускоряются.";
+      || "Выходят данные.\nДвижения ускоряются.";
   }
   if (phase === "post_event") {
     return renderPhrase(POST_EVENT, "post", category, payload)
-      || "🕒 Первичная реакция завершена.\nДвижения постепенно снижаются.";
+      || "Первичная реакция завершена.\nДвижения постепенно снижаются.";
   }
 
   return renderPhrase(PRE_EVENT, "pre", category, payload)
-    || "📊 Активно окно волатильности.";
+    || "Активно окно волатильности.";
 };
 
 const getDuringEventFirstLine = (payload) => {
@@ -58,7 +58,7 @@ const getDuringEventFirstLine = (payload) => {
       return applyPlaceholders({ first: phrase.first, second: "" }, payload).trim();
     }
   }
-  return "📊 Выходят данные.";
+  return "Выходят данные.";
 };
 
 module.exports = {

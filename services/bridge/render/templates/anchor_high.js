@@ -27,7 +27,7 @@ const renderAnchorHighPreEvent = (payload) => {
 };
 
 const renderAnchorHighPostEvent = (payload) =>
-  `🕒 ${getEventName(payload)} вышел. Рынок переваривает данные.`;
+  `${getEventName(payload)} вышел. Рынок переваривает данные.`;
 
 const renderAnchorHighTemplate = (payload) => {
   const phase = String(payload && payload.phase ? payload.phase : "none").trim();
