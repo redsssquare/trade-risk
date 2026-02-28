@@ -13,7 +13,8 @@ const {
   ANCHOR_ZERO_PHRASES,
   ANCHOR_ONE_PHRASES,
   ANCHOR_TWO_PHRASES,
-  ANCHOR_MANY_PHRASES,
+  ANCHOR_MANY_SUFFIXES,
+  ANCHOR_MANY_TEMPLATES,
   CLUSTERS_ZERO_PHRASES,
   CLUSTERS_ONE_PHRASES,
   CLUSTERS_TWO_PHRASES,
@@ -31,6 +32,7 @@ const {
   LEVEL_MODERATE_SUB,
   LEVEL_SATURATED_SUB,
   DAY_NAME_RU,
+  DAY_NAME_RU_ACC,
   MAX_LINES,
   WEEKLY_FORBIDDEN_WORDS,
 } = require("./weekly-end-phrases");
@@ -95,11 +97,19 @@ function getVariantIndex(weekRange) {
   return Math.abs(h) % 4;
 }
 
-/** active_days (Mon, Tue, ...) → русские названия */
+/** active_days (Mon, Tue, ...) → русские названия (им. п.) */
 function getActiveDaysRu(activeDays) {
   const days = Array.isArray(activeDays) ? activeDays : [];
   return days
     .map((d) => (typeof d === "string" ? DAY_NAME_RU[d] || d : ""))
+    .filter(Boolean);
+}
+
+/** active_days → винительный падеж для «пришёлся на {day}» */
+function getActiveDaysRuAcc(activeDays) {
+  const days = Array.isArray(activeDays) ? activeDays : [];
+  return days
+    .map((d) => (typeof d === "string" ? DAY_NAME_RU_ACC[d] || d : ""))
     .filter(Boolean);
 }
 
@@ -113,7 +123,7 @@ function hasOnlyAllowedEmoji(text) {
   if (!text || typeof text !== "string") return true;
   const emojiMatches = text.match(/\p{Emoji}/gu);
   if (!emojiMatches || emojiMatches.length === 0) return true;
-  const CALENDAR = 0x1f4c5; // 📆
+  const CALENDAR = 0x1f4c6; // 📆 (tear-off calendar)
   const ASCII_DIGITS = new Set([0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]);
   return emojiMatches.every((e) => {
     const cp = e.codePointAt(0);
@@ -140,7 +150,8 @@ function validateWeeklyEnd(payload, text) {
       : levelKey === LEVEL_MODERATE
         ? LEVEL_MODERATE_SUB
         : LEVEL_CALM_SUB;
-  if (!t.includes(levelSub)) {
+  const tLower = t.toLowerCase();
+  if (!tLower.includes(levelSub)) {
     return { ok: false, reason: "level_mismatch" };
   }
 
@@ -180,19 +191,17 @@ function validateWeeklyEnd(payload, text) {
  * }} payload
  * @returns {string}
  */
-/** Строка про высокозначимые с правильным склонением */
+/** Строка про высокозначимые с правильным склонением (только для вывода в TG, без внутренних терминов). */
 function getHighEventsLine(n, variantIndex) {
   const templates = HIGH_EVENTS_PHRASES;
   const idx = variantIndex % (templates.length || 1);
   const t = templates[idx] || templates[0];
-  const word =
-    idx <= 1
-      ? pluralRu(n, "публикация", "публикации", "публикаций")
-      : idx === 2
-        ? pluralRu(n, "high-событие", "high-события", "high-событий")
-        : pluralRu(n, "публикация", "публикации", "публикаций");
+  const word = pluralRu(n, "публикация", "публикации", "публикаций");
   if (t.includes("высокой значимости")) {
     return `${n} ${word} высокой значимости.`;
+  }
+  if (t.includes("высоким приоритетом")) {
+    return `${n} ${word} с высоким приоритетом.`;
   }
   return `${n} ${word}.`;
 }
@@ -238,8 +247,10 @@ function formatWeeklyEnd(payload) {
   } else if (anchorEvents === 2) {
     metricLines.push(ANCHOR_TWO_PHRASES[v] != null ? ANCHOR_TWO_PHRASES[v] : ANCHOR_TWO_PHRASES[0]);
   } else {
-    const manyPhrase = ANCHOR_MANY_PHRASES[v] != null ? ANCHOR_MANY_PHRASES[v] : ANCHOR_MANY_PHRASES[0];
-    metricLines.push(manyPhrase.replace("{n}", String(anchorEvents)));
+    const suffixes = ANCHOR_MANY_SUFFIXES[v] || ANCHOR_MANY_SUFFIXES[0];
+    const suffix = pluralRu(anchorEvents, suffixes[0], suffixes[1], suffixes[2]);
+    const template = ANCHOR_MANY_TEMPLATES[v] || ANCHOR_MANY_TEMPLATES[0];
+    metricLines.push(template(anchorEvents, suffix));
   }
   if (clusters === 0) {
     metricLines.push(CLUSTERS_ZERO_PHRASES[v] != null ? CLUSTERS_ZERO_PHRASES[v] : CLUSTERS_ZERO_PHRASES[0]);
@@ -256,10 +267,13 @@ function formatWeeklyEnd(payload) {
     distributionLines.push(DISTRIBUTION_CALM_PHRASES[v] != null ? DISTRIBUTION_CALM_PHRASES[v] : DISTRIBUTION_CALM_PHRASES[0]);
   } else if (activeDaysRu.length === 1) {
     const onePhrase = DISTRIBUTION_ONE_PHRASES[v] != null ? DISTRIBUTION_ONE_PHRASES[v] : DISTRIBUTION_ONE_PHRASES[0];
-    distributionLines.push(onePhrase.replace("{day}", activeDaysRu[0]));
+    const dayName = onePhrase.includes("пришёлся на") ? getActiveDaysRuAcc(payload.active_days)[0] : activeDaysRu[0];
+    distributionLines.push(onePhrase.replace("{day}", dayName));
   } else if (activeDaysRu.length === 2) {
     const twoPhrase = DISTRIBUTION_TWO_PHRASES[v] != null ? DISTRIBUTION_TWO_PHRASES[v] : DISTRIBUTION_TWO_PHRASES[0];
-    distributionLines.push(twoPhrase.replace("{day1}", activeDaysRu[0]).replace("{day2}", activeDaysRu[1]));
+    const useAcc = twoPhrase.includes("пришёлся на");
+    const days = useAcc ? getActiveDaysRuAcc(payload.active_days) : activeDaysRu;
+    distributionLines.push(twoPhrase.replace("{day1}", days[0]).replace("{day2}", days[1]));
   } else {
     distributionLines.push(DISTRIBUTION_MANY_PHRASES[v] != null ? DISTRIBUTION_MANY_PHRASES[v] : DISTRIBUTION_MANY_PHRASES[0]);
   }

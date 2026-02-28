@@ -100,7 +100,7 @@ function hasOnlyAllowedEmoji(text) {
   if (!text || typeof text !== "string") return true;
   const emojiMatches = text.match(/\p{Emoji}/gu);
   if (!emojiMatches || emojiMatches.length === 0) return true;
-  const CALENDAR = 0x1f4c5; // 📆
+  const CALENDAR = 0x1f4c6; // 📆 (U+1F4C6)
   const ASCII_DIGITS = new Set([0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]);
   return emojiMatches.every((e) => {
     const cp = e.codePointAt(0);

@@ -4,6 +4,8 @@
  * Проверяет: текст по формату спеки, уровень корректен, запрещённых слов нет, строк ≤ 9.
  * Отправка только в TELEGRAM_TEST_CHANNEL_ID (bridge).
  * Usage: BRIDGE_URL=http://localhost:3000 node scripts/send-weekly-digest-test.js
+ * Только превью (без отправки в TG): DRY_RUN=1 node scripts/send-weekly-digest-test.js
+ * Превью с разными неделями (все варианты фраз в логах): DRY_RUN=1 SHOW_WEEKS=1 node scripts/send-weekly-digest-test.js
  */
 
 const http = require("http");
@@ -12,6 +14,8 @@ const { URL } = require("url");
 const path = require("path");
 
 const BRIDGE_URL = process.env.BRIDGE_URL || "http://localhost:3000";
+const DRY_RUN = process.env.DRY_RUN === "1" || process.env.NO_SEND === "1";
+const SHOW_WEEKS = process.env.SHOW_WEEKS === "1";
 
 const { formatWeeklyEnd, validateWeeklyEnd } = require(path.join(__dirname, "../services/bridge/render/weekly-end-format"));
 
@@ -158,21 +162,45 @@ async function main() {
       continue;
     }
 
-    try {
-      const { statusCode, body } = await postWeeklyDigest(payloadWithWeek);
-      if (statusCode >= 200 && statusCode < 300) {
-        console.log("[OK] POST →", statusCode, body.meta && body.meta.sent ? "sent" : "");
-      } else {
-        console.log("[SKIP] POST →", statusCode, "(bridge не запущен или маршрут недоступен)");
+    if (!DRY_RUN) {
+      try {
+        const { statusCode, body } = await postWeeklyDigest(payloadWithWeek);
+        if (statusCode >= 200 && statusCode < 300) {
+          console.log("[OK] POST →", statusCode, body.meta && body.meta.sent ? "sent" : "");
+        } else {
+          console.log("[SKIP] POST →", statusCode, "(bridge не запущен или маршрут недоступен)");
+        }
+      } catch (err) {
+        console.log("[SKIP] POST error:", err.message, "(запустите bridge для реальной отправки)");
       }
-    } catch (err) {
-      console.log("[SKIP] POST error:", err.message, "(запустите bridge для реальной отправки)");
+    } else {
+      console.log("[DRY_RUN] Отправка в Telegram пропущена.");
     }
     console.log("");
   }
 
   if (hasFailure) process.exit(1);
-  console.log("[send-weekly-digest-test] Все проверки формата пройдены. Для отправки в Telegram запустите bridge и повторите.");
+
+  if (DRY_RUN && SHOW_WEEKS) {
+    const weekRanges = ["06–10.02", "17–21.02", "01–05.03", "24–28.02"];
+    console.log("\n========== Разные недели (варианты фраз) ==========\n");
+    for (const weekRange of weekRanges) {
+      console.log("#### Неделя", weekRange, "####\n");
+      for (const { name, payload } of FIXED_PAYLOADS) {
+        const p = { ...payload, week_range: weekRange };
+        const text = formatWeeklyEnd(p);
+        console.log("---", name, "---");
+        console.log(text);
+        console.log("");
+      }
+      console.log("");
+    }
+    console.log("[send-weekly-digest-test] Превью завершено (DRY_RUN + SHOW_WEEKS).");
+  } else if (DRY_RUN) {
+    console.log("[send-weekly-digest-test] Превью завершено (DRY_RUN). Для вариантов по разным неделям: DRY_RUN=1 SHOW_WEEKS=1");
+  } else {
+    console.log("[send-weekly-digest-test] Все проверки формата пройдены. Для отправки в Telegram запустите bridge и повторите.");
+  }
 }
 
 main();

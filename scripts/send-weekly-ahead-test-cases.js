@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Отправляет тестовые кейсы «Ритм недели» (Weekly Ahead) в тестовый Telegram-канал.
- * Bridge должен быть запущен с TELEGRAM_TEST_CHANNEL_ID — тогда сообщения придут в канал.
+ * Отправляет тестовые кейсы «Ритм недели» (Weekly Ahead) в Telegram.
+ * Bridge отправляет в канал OPENCLAW_TELEGRAM_CHAT_ID (основной, как daily/weekly digest).
  * Usage: BRIDGE_URL=http://localhost:3000 node scripts/send-weekly-ahead-test-cases.js
+ * DRY_RUN=1 — только формат и валидация, без отправки в Telegram.
  *
- * Перед запуском: в .env bridge задать TELEGRAM_TEST_CHANNEL_ID (ID тестового канала или чата).
+ * Перед запуском: в .env bridge задать OPENCLAW_TELEGRAM_CHAT_ID (ID канала).
  */
 
 const http = require("http");
@@ -13,6 +14,7 @@ const { URL } = require("url");
 const path = require("path");
 
 const BRIDGE_URL = process.env.BRIDGE_URL || "http://localhost:3000";
+const DRY_RUN = process.env.DRY_RUN === "1" || process.env.NO_SEND === "1";
 
 const { formatWeeklyAhead, validateWeeklyAhead } = require(path.join(
   __dirname,
@@ -120,6 +122,32 @@ const TEST_CASES = [
       high_events_per_day: [1, 0, 2, 0, 2],
     },
   },
+  {
+    name: "7. Граница: все нули (1 активный день)",
+    payload: {
+      week_range: "03–07.03",
+      high_events: 0,
+      anchor_events: 0,
+      clusters: 0,
+      total_window_minutes: 0,
+      active_days: ["Wed"],
+      quiet_days_count: 4,
+      busy_day_bonus: 0,
+    },
+  },
+  {
+    name: "8. Граница: один элемент (1 anchor, 1 high)",
+    payload: {
+      week_range: "03–07.03",
+      high_events: 1,
+      anchor_events: 1,
+      clusters: 1,
+      total_window_minutes: 30,
+      active_days: ["Tue"],
+      quiet_days_count: 4,
+      busy_day_bonus: 0,
+    },
+  },
 ];
 
 function postWeeklyAhead(body) {
@@ -158,7 +186,11 @@ async function main() {
   const weekRange = getMoscowWeekRange();
   console.log("[send-weekly-ahead-test-cases] Bridge URL:", BRIDGE_URL);
   console.log("[send-weekly-ahead-test-cases] Неделя по МСК (пн–пт):", weekRange);
-  console.log("[send-weekly-ahead-test-cases] Кейсы отправляются в TELEGRAM_TEST_CHANNEL_ID (настрой в .env bridge).\n");
+  if (DRY_RUN) {
+    console.log("[send-weekly-ahead-test-cases] DRY_RUN=1 — отправка в Telegram отключена.\n");
+  } else {
+    console.log("[send-weekly-ahead-test-cases] Кейсы отправляются в OPENCLAW_TELEGRAM_CHAT_ID (основной канал).\n");
+  }
 
   let hasFailure = false;
 
@@ -180,21 +212,25 @@ async function main() {
     console.log("Текст:\n" + text.split("\n").map((l) => "  " + l).join("\n"));
     console.log("");
 
-    try {
-      const { statusCode, body } = await postWeeklyAhead(payloadWithWeek);
-      if (statusCode >= 200 && statusCode < 300) {
-        console.log("[OK] POST →", statusCode, body.meta && body.meta.sent ? "отправлено в тестовый канал" : "");
-      } else if (statusCode === 503) {
-        console.log("[!] 503 — задай TELEGRAM_TEST_CHANNEL_ID в окружении bridge и перезапусти bridge.");
-      } else if (statusCode === 500) {
-        console.log("[!] 500 — ошибка отправки:", body.error || "");
-        if (body.details) console.log("    details:", JSON.stringify(body.details));
-        console.log("    Проверь: OPENCLAW_GATEWAY_TOKEN в bridge, openclaw runtime доступен, бот в канале.");
-      } else {
-        console.log("[SKIP] POST →", statusCode, body.error || "");
+    if (!DRY_RUN) {
+      try {
+        const { statusCode, body } = await postWeeklyAhead(payloadWithWeek);
+        if (statusCode >= 200 && statusCode < 300) {
+          console.log("[OK] POST →", statusCode, body.meta && body.meta.sent ? "отправлено в тестовый канал" : "");
+        } else if (statusCode === 503) {
+          console.log("[!] 503 — задай TELEGRAM_TEST_CHANNEL_ID в окружении bridge и перезапусти bridge.");
+        } else if (statusCode === 500) {
+          console.log("[!] 500 — ошибка отправки:", body.error || "");
+          if (body.details) console.log("    details:", JSON.stringify(body.details));
+          console.log("    Проверь: OPENCLAW_GATEWAY_TOKEN в bridge, openclaw runtime доступен, бот в канале.");
+        } else {
+          console.log("[SKIP] POST →", statusCode, body.error || "");
+        }
+      } catch (err) {
+        console.log("[SKIP] POST error:", err.message, "— запусти bridge (BRIDGE_URL?) или проверь сеть.");
       }
-    } catch (err) {
-      console.log("[SKIP] POST error:", err.message, "— запусти bridge (BRIDGE_URL?) или проверь сеть.");
+    } else {
+      console.log("[DRY_RUN] POST пропущен.");
     }
     console.log("");
   }
@@ -205,9 +241,9 @@ async function main() {
   console.log("[send-weekly-ahead-test-cases] Все кейсы обработаны. Проверь сообщения в тестовом Telegram-канале.");
   console.log("");
   console.log("Если сообщений нет:");
-  console.log("  • 503 → в .env bridge задай TELEGRAM_TEST_CHANNEL_ID (ID канала/чата, например -100xxxxxxxxxx)");
-  console.log("  • 500 → в .env bridge задай OPENCLAW_GATEWAY_TOKEN; проверь, что openclaw runtime доступен");
-  console.log("  • 200, но в Telegram пусто → бот должен быть админом в канале; TELEGRAM_TEST_CHANNEL_ID = ID канала (с минусом)");
+  console.log("  • 503 → в .env bridge задай OPENCLAW_TELEGRAM_CHAT_ID (ID канала, например -100xxxxxxxxxx)");
+  console.log("  • 500 → в .env задай OPENCLAW_GATEWAY_TOKEN; проверь, что openclaw runtime доступен");
+  console.log("  • 200, но в Telegram пусто → бот должен быть админом в канале; OPENCLAW_TELEGRAM_CHAT_ID = ID канала (с минусом)");
 }
 
 main();

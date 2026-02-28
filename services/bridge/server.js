@@ -394,7 +394,7 @@ app.post("/weekly-digest", async (req, res) => {
   }
 });
 
-/** POST /weekly-ahead: спекы как у weekly-digest + опционально high_events_per_day; форматирует и отправляет в TELEGRAM_TEST_CHANNEL_ID (временно). */
+/** POST /weekly-ahead: спекы как у weekly-digest + опционально high_events_per_day; форматирует и отправляет в OPENCLAW_TELEGRAM_CHAT_ID (основной канал). */
 app.post("/weekly-ahead", async (req, res) => {
   try {
     const payload = req.body;
@@ -405,10 +405,10 @@ app.post("/weekly-ahead", async (req, res) => {
       });
     }
 
-    if (!TELEGRAM_TEST_CHANNEL_ID || !TELEGRAM_TEST_CHANNEL_ID.trim()) {
+    if (!OPENCLAW_TELEGRAM_CHAT_ID || !OPENCLAW_TELEGRAM_CHAT_ID.trim()) {
       return res.status(503).json({
         status: "error",
-        error: "TELEGRAM_TEST_CHANNEL_ID is not configured"
+        error: "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
       });
     }
 
@@ -423,7 +423,7 @@ app.post("/weekly-ahead", async (req, res) => {
       });
     }
 
-    const targetChatId = TELEGRAM_TEST_CHANNEL_ID.trim();
+    const targetChatId = OPENCLAW_TELEGRAM_CHAT_ID.trim();
     console.log("[bridge:weekly-ahead:send] target=" + (targetChatId ? targetChatId.slice(-6) + " (…)" : "MISSING"));
     await sendTelegramMessage(targetChatId, text);
 
