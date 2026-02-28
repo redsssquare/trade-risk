@@ -8,6 +8,8 @@
  * Usage:
  *   DRY_RUN=1 node scripts/send-daily-digest-test-cases.js
  *   BRIDGE_URL=http://localhost:3000 node scripts/send-daily-digest-test-cases.js
+ *   SELECT_CASES=1,2,5 node scripts/send-daily-digest-test-cases.js  — только кейсы 1, 2, 5
+ *   SELECT_CASES=13,14,15,16 … — отправить в Telegram только: Спокойный, Умеренный, Насыщенный, 4 валюты (лимит 3)
  */
 
 const http = require("http");
@@ -16,6 +18,8 @@ const { URL } = require("url");
 
 const DRY_RUN = process.env.DRY_RUN === "1";
 const BRIDGE_URL = process.env.BRIDGE_URL || "http://localhost:3000";
+// SELECT_CASES=1,2,5 — отправить только кейсы с номерами 1, 2, 5 (1-based). Без переменной — все кейсы.
+const SELECT_CASES_RAW = process.env.SELECT_CASES || "";
 
 // Список запрещённых слов (из server.js FORBIDDEN_TELEGRAM_WORDS)
 const FORBIDDEN_WORDS = [
@@ -135,6 +139,35 @@ function buildPayloads(moscowDateStr) {
       name: "Кейс 12 (граничный) — незнакомый title (без перевода)",
       items: [
         { title: "Some Unknown Indicator XYZ", date: t14, impact: "High", country: "EUR" }
+      ]
+    },
+
+    // ── Тест отправки в Telegram: уровень + валюты ─────────────────────────────
+    { name: "Кейс 13 — Спокойный день (0 событий)", items: [] },
+    {
+      name: "Кейс 14 — Умеренный день (1 событие, EUR)",
+      items: [
+        { title: "ECB Rate Decision", date: t14, impact: "High", country: "EUR" }
+      ]
+    },
+    {
+      name: "Кейс 15 — Насыщенный день (USD, CAD, GBP)",
+      items: [
+        { title: "Retail Sales", date: t10, impact: "High", country: "USD" },
+        { title: "Canada GDP", date: t11, impact: "High", country: "CAD" },
+        { title: "UK CPI", date: t12, impact: "High", country: "GBP" },
+        { title: "FOMC Rate Decision", date: t14, impact: "High", country: "USD" },
+        { title: "Consumer Confidence", date: t16, impact: "High", country: "CAD" }
+      ]
+    },
+    {
+      name: "Кейс 16 — 4 валюты (лимит Затронет = 3)",
+      items: [
+        { title: "Retail Sales", date: t10, impact: "High", country: "USD" },
+        { title: "Canada GDP", date: t11, impact: "High", country: "CAD" },
+        { title: "UK CPI", date: t12, impact: "High", country: "GBP" },
+        { title: "ECB Rate Decision", date: t14, impact: "High", country: "EUR" },
+        { title: "ISM Manufacturing", date: t16, impact: "High", country: "USD" }
       ]
     }
   ];
@@ -307,13 +340,23 @@ async function runSend(payloads) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+function filterPayloadsBySelectCases(payloads) {
+  if (!SELECT_CASES_RAW.trim()) return payloads;
+  const indices = SELECT_CASES_RAW.split(",")
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => Number.isFinite(n) && n >= 1);
+  if (indices.length === 0) return payloads;
+  return payloads.filter((_, i) => indices.includes(i + 1));
+}
+
 async function main() {
   const moscowDateStr = getMoscowDateStr();
-  const payloads = buildPayloads(moscowDateStr);
+  let payloads = buildPayloads(moscowDateStr);
+  payloads = filterPayloadsBySelectCases(payloads);
 
   console.log("[send-daily-digest-test-cases] Дата (MSK):", moscowDateStr);
   console.log("[send-daily-digest-test-cases] Режим:", DRY_RUN ? "DRY_RUN (локально, без отправки)" : "SEND (отправка в Telegram)");
-  console.log("[send-daily-digest-test-cases] Кейсов:", payloads.length, "\n");
+  console.log("[send-daily-digest-test-cases] Кейсов:", payloads.length, SELECT_CASES_RAW.trim() ? `(SELECT_CASES=${SELECT_CASES_RAW})` : "", "\n");
 
   if (DRY_RUN) {
     runDryRun(moscowDateStr, payloads);

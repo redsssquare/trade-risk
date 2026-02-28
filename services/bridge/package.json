@@ -8,6 +8,10 @@
   },
   "dependencies": {
     "express": "4.21.2",
-    "openai": "^6.22.0"
+    "openai": "^6.22.0",
+    "puppeteer": "^12.0.0"
+  },
+  "overrides": {
+    "ws": "^8.18.0"
   }
 }

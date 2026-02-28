@@ -6,6 +6,7 @@ const { computeFromRawEvents } = require("./lib/volatility-compute");
 const { classifyImpactTypeForEvent, getClusterAnchorNames } = require("./lib/anchor-event-classifier");
 const { renderTelegramTextTemplate, getDuringEventFirstLine } = require("./render/telegram-render");
 const { formatDailyDigest } = require("./render/digest-format");
+const { buildDigestImageData, renderDigestImage } = require("./render/digest-image");
 const { formatWeeklyEnd, validateWeeklyEnd } = require("./render/weekly-end-format");
 const { formatWeeklyAhead, validateWeeklyAhead } = require("./render/weekly-ahead-format");
 const { isWeeklyAheadPayload } = require("./render/weekly-ahead-payload");
@@ -15,6 +16,7 @@ const PORT = 3000;
 const OPENCLAW_RUNTIME_URL = process.env.OPENCLAW_RUNTIME_URL || "http://openclaw:18789/tools/invoke";
 const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 const OPENCLAW_TELEGRAM_CHAT_ID = process.env.OPENCLAW_TELEGRAM_CHAT_ID || "";
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.OPENCLAW_TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_TEST_CHANNEL_ID = process.env.TELEGRAM_TEST_CHANNEL_ID || "";
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "";
 const OPENCLAW_B2_TEST_MESSAGE = process.env.OPENCLAW_B2_TEST_MESSAGE || "[B2 TEST] POST -> bridge -> openclaw -> Telegram";
@@ -318,13 +320,39 @@ app.post("/daily-digest", async (req, res) => {
       });
     }
 
-    await sendTelegramMessage(OPENCLAW_TELEGRAM_CHAT_ID.trim(), text);
+    const chatId = OPENCLAW_TELEGRAM_CHAT_ID.trim();
+    const hasPhotoToken = !!(TELEGRAM_BOT_TOKEN || "").trim();
+    let photoSent = false;
+    let photoError = null;
+
+    if (hasPhotoToken) {
+      try {
+        const imageData = buildDigestImageData(withAnchor, { moscowDateStr });
+        const imageBuffer = await renderDigestImage(imageData);
+        await sendTelegramPhoto(chatId, imageBuffer, text);
+        photoSent = true;
+      } catch (err) {
+        photoError = err && err.message ? err.message : String(err);
+        if (err && err.details && err.details.body) {
+          console.error("[bridge:daily-digest:image-error]", photoError, "details:", JSON.stringify(err.details.body));
+        } else {
+          console.error("[bridge:daily-digest:image-error]", photoError);
+        }
+        await sendTelegramMessage(chatId, text);
+      }
+    } else {
+      photoError = "TELEGRAM_BOT_TOKEN (or OPENCLAW_TELEGRAM_BOT_TOKEN) not set";
+      console.warn("[bridge:daily-digest] photo skipped:", photoError);
+      await sendTelegramMessage(chatId, text);
+    }
 
     return res.json({
       status: "ok",
       meta: {
         eventsCount: withAnchor.length,
         sent: true,
+        photo_sent: photoSent,
+        ...(photoError && { photo_error: photoError }),
         calendar_source: calendarSource
       }
     });
@@ -912,6 +940,37 @@ const sendTelegramMessage = async (targetChatId, message) => {
   }
 
   return runtimeBody;
+};
+
+const TELEGRAM_CAPTION_MAX_LENGTH = 1024;
+
+/** Отправка фото в Telegram через Bot API (multipart/form-data). */
+const sendTelegramPhoto = async (chatId, imageBuffer, caption) => {
+  const token = (TELEGRAM_BOT_TOKEN || "").trim();
+  if (!token || !chatId) {
+    throw new Error("missing TELEGRAM_BOT_TOKEN or chat id");
+  }
+  const safeCaption = typeof caption === "string" && caption.length > TELEGRAM_CAPTION_MAX_LENGTH
+    ? caption.slice(0, TELEGRAM_CAPTION_MAX_LENGTH - 3) + "..."
+    : (caption || "");
+
+  const formData = new FormData();
+  formData.append("chat_id", chatId);
+  formData.append("photo", new Blob([imageBuffer], { type: "image/png" }), "digest.png");
+  if (safeCaption) formData.append("caption", safeCaption);
+
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+    method: "POST",
+    body: formData
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !body.ok) {
+    const err = new Error("telegram sendPhoto failed");
+    err.details = { status: response.status, body };
+    throw err;
+  }
+  return body;
 };
 
 const buildHeartbeatMessage = () => {

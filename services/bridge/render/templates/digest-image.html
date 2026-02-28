@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Digest</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="digest-image.css">
+  <style>
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+</head>
+<body>
+  <div class="digest-wrapper digest-wrapper--{{level}}">
+    <div class="digest-card digest-card--header">
+      <div class="digest-header-row">
+        <div class="digest-date-block">
+          {{chartEmoji}}
+          <span class="digest-date">{{date}}</span>
+        </div>
+        <div class="digest-label">Индикатор риска дня</div>
+      </div>
+    </div>
+
+    <div class="digest-card digest-card--risk">
+      <div class="digest-level-row">
+        <span class="digest-level">Уровень</span>
+        <span class="digest-level-value digest-level-value--{{level}}">{{levelLabel}}</span>
+      </div>
+      <div class="digest-description">{{description}}</div>
+      <div class="digest-peak-info">
+        <span class="digest-peak-label">Пик активности</span>
+        <span class="digest-peak-period">{{peakActivity}}</span>
+      </div>
+      <div class="digest-affected-info">
+        <span class="digest-affected-label">Затронет</span>
+        <span class="digest-affected-currencies">{{currencies}}</span>
+      </div>
+    </div>
+
+    <div class="digest-card digest-card--footer">
+      <div class="digest-footer-row">
+        <div class="digest-profile">
+          <div class="digest-profile-image"></div>
+          <span class="digest-footer-text">Трейд и Риск</span>
+        </div>
+        <span class="digest-footer-handle">@trade_riski</span>
+      </div>
+      <div class="digest-footer-subtitle">Инструмент фильтрации новостных фаз и риска</div>
+    </div>
+  </div>
+</body>
+</html>

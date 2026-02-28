@@ -2,7 +2,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache su-exec
+RUN apk add --no-cache su-exec chromium nss freetype harfbuzz ca-certificates ttf-freefont
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 COPY --chown=node:node services/bridge/package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force

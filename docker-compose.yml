@@ -12,6 +12,7 @@ services:
       - CALENDAR_URL=${CALENDAR_URL:-https://nfs.faireconomy.media/ff_calendar_thisweek.json}
       - OPENCLAW_RUNTIME_URL=http://openclaw:18789/tools/invoke
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-bridge-runtime-token}
+      - OPENCLAW_TELEGRAM_BOT_TOKEN=${OPENCLAW_TELEGRAM_BOT_TOKEN:-}
       - OPENCLAW_TELEGRAM_CHAT_ID=${OPENCLAW_TELEGRAM_CHAT_ID:-}
       - TELEGRAM_TEST_CHANNEL_ID=${TELEGRAM_TEST_CHANNEL_ID:-}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID:-}
