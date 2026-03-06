@@ -54,6 +54,12 @@
 
 - **Кластеризация (Этап 3):** события High в пределах `CLUSTER_WINDOW_MIN` (5 мин) объединяются в один кластер. Уведомление — одно на серию, а не на каждое событие. В `context` добавляются `cluster_size`, `cluster_events`, `cluster_window_min` (опционально).
 - **Anchor vs high (Этап 4):** классификатор различает anchor-события (NFP, FOMC, CPI, ECB/BOE/BOJ Rate Decision, Powell Speech) и обычные High. Алиасы в `data/anchor_events.json`. В LLM-вход идут `impact_type` (`anchor_high`/`high`), `anchor_label`, `cluster_has_anchor`, `cluster_anchor_names` — LLM может упомянуть anchor даже если primary не anchor.
+- **NFP Classification Fix:** уточнённая классификация Non-Farm Payrolls:
+  - **country=USD/US:** NFP считается anchor только для событий с `country=USD` или `country=US` (или при отсутствии country — обратная совместимость). События других стран не помечаются как NFP.
+  - **ADP exclude:** ADP Employment Change и аналогичные события (ADP, Private Nonfarm, Private Payrolls) исключены из NFP — не помечаются как anchor.
+  - **NFP package detection:** если в одном временном слоте есть Unemployment Rate и Average Hourly Earnings (оба с country=USD/US), все события слота помечаются как NFP anchor.
+  - **First Friday signal:** первый пятница месяца + Employment Change/Nonfarm (без ADP) + USD — дополнительный сигнал для пометки как NFP в пограничных случаях.
+  - **Digest:** для NFP-кластера в дневном дайджесте используется специальная строка «Рынок труда США (Non-Farm Payrolls)» вместо общей «Серия из N публикаций».
 - **Render-шаблоны (Этап 5):** отдельный слой `services/bridge/render/` — шаблоны для `high` и `anchor_high`. Текст не пересчитывает фазы/минуты, использует только поля payload. Поддержка серии публикаций (`cluster_size>1`) и anchor внутри серии в pre_event.
 - Фазы:
   - `pre_event`: 7 минут до первого события кластера

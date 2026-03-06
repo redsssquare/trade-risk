@@ -28,6 +28,11 @@
   - В LLM-контекст добавлены `cluster_has_anchor`, `cluster_anchor_names` — при primary=high и anchor в кластере LLM может написать «включая …».
   - Тесты: `npm run test:anchor-classifier` (anchor match, high non-anchor, ambiguous title, серия+anchor в кластере).
 
+- **NFP Classification Fix** (2026-03-06)
+  - NFP package detection: Unemployment Rate + Average Hourly Earnings в одном временном слоте (country=USD/US) → все события слота помечаются как NFP anchor.
+  - Специальная строка дайджеста для NFP-кластера: «Рынок труда США (Non-Farm Payrolls)» вместо общей «Серия из N публикаций».
+  - First Friday месяца как дополнительный сигнал: Employment Change/Nonfarm (без ADP) + USD в первый пятницу → NFP anchor.
+
 - **Этап 3: Модуль «пачка новостей» (cluster)** (2026-02-22)
   - Кластеризация близких High-событий (в пределах `CLUSTER_WINDOW_MIN=5` мин) — одно уведомление на серию вместо спама по каждому событию.
   - В `context` добавлены опциональные поля: `cluster_size`, `cluster_events`, `cluster_window_min`.
@@ -52,12 +57,20 @@
 
 ### Changed
 
+- **NFP Classification Fix — уточнённая логика** (2026-03-06)
+  - NFP anchor применяется только к событиям с `country=USD` или `country=US`; события других стран не классифицируются как NFP.
+  - ADP-события (ADP Employment Change, Private Nonfarm, Private Payrolls) исключены из NFP через `exclude` в `data/anchor_events.json`.
+
 - **Тестовые окна укорочены в ~3×** (2026-02-22)
   - pre: 20–30 мин → 7 мин, during: 5 мин → 4 мин, post: 15 мин → 5 мин (event+4..event+9).
   - Чтобы живой тест проходил за ~16 мин вместо ~40 мин.
   - Обновлены: n8n workflow, bridge, lib/volatility-compute, volatility_test_cases.md.
 
 ### Fixed
+
+- **NFP false positives для не-US событий и ADP** (2026-03-06)
+  - События с названиями, похожими на NFP, но с `country` отличным от USD/US, больше не помечаются как anchor.
+  - ADP Employment Change и аналогичные события больше не ошибочно классифицируются как NFP anchor.
 
 - **post_event не публиковался по расписанию**
   - Причина: n8n cron раз в минуту + короткие окна → переход during→post «промахивался».

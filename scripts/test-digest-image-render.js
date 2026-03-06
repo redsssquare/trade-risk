@@ -151,6 +151,7 @@ function getWithAnchor(items, moscowDateStr) {
     const { impact_type, anchor_label } = classifyImpactTypeForEvent({
       title: item.title || "",
       impact: item.impact || "",
+      country: item.country || "USD"
     });
     return {
       ...item,

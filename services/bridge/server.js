@@ -3,7 +3,7 @@ const OpenAI = require("openai");
 const fs = require("fs");
 const path = require("path");
 const { computeFromRawEvents } = require("./lib/volatility-compute");
-const { classifyImpactTypeForEvent, getClusterAnchorNames } = require("./lib/anchor-event-classifier");
+const { classifyImpactTypeForEvent, classifyAnchorWithContext, getClusterAnchorNames } = require("./lib/anchor-event-classifier");
 const { renderTelegramTextTemplate, getDuringEventFirstLine } = require("./render/telegram-render");
 const { formatDailyDigest } = require("./render/digest-format");
 const { buildDigestImageData, renderDigestImage } = require("./render/digest-image");
@@ -244,18 +244,7 @@ app.get("/today-events", async (_req, res) => {
       return Number.isFinite(eventMs) && eventMs >= dayStartMs && eventMs <= dayEndMs;
     });
 
-    const withAnchor = todayEvents.map((item) => {
-      const { impact_type, anchor_label } = classifyImpactTypeForEvent({
-        title: item.title || "",
-        impact: item.impact || ""
-      });
-      return {
-        ...item,
-        impact_type: impact_type || "high",
-        anchor_label: anchor_label || null,
-        is_anchor: impact_type === "anchor_high"
-      };
-    });
+    const withAnchor = classifyAnchorWithContext(todayEvents);
 
     return res.json({
       date_msk: moscowDateStr,
@@ -298,18 +287,7 @@ app.post("/daily-digest", async (req, res) => {
       return Number.isFinite(eventMs) && eventMs >= dayStartMs && eventMs <= dayEndMs;
     });
 
-    const withAnchor = todayEvents.map((item) => {
-      const { impact_type, anchor_label } = classifyImpactTypeForEvent({
-        title: item.title || "",
-        impact: item.impact || ""
-      });
-      return {
-        ...item,
-        impact_type: impact_type || "high",
-        anchor_label: anchor_label || null,
-        is_anchor: impact_type === "anchor_high"
-      };
-    });
+    const withAnchor = classifyAnchorWithContext(todayEvents);
 
     const text = formatDailyDigest(withAnchor, { moscowDateStr });
 

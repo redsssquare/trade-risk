@@ -8,6 +8,10 @@
         "non-farm payrolls",
         "non farm payrolls",
         "nonfarm payrolls"
+      ],
+      "exclude": [
+        "adp",
+        "adp national employment report"
       ]
     },
     {

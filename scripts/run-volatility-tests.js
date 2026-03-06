@@ -104,7 +104,8 @@ function buildVolatilityPayloadLikeBridge(state, context, effectiveNowMs) {
   const impactTypeFromContext = normalizeText(safeContext.impact_type);
   const fallbackImpactType = classifyImpactTypeForEvent({
     title: eventName,
-    impact: isHighImpactEvent ? "High" : ""
+    impact: isHighImpactEvent ? "High" : "",
+    country: safeContext.currency || safeContext.country || "USD"
   }).impact_type || "high";
   const impactType = impactTypeFromContext === "anchor_high" || impactTypeFromContext === "high"
     ? impactTypeFromContext
@@ -112,7 +113,7 @@ function buildVolatilityPayloadLikeBridge(state, context, effectiveNowMs) {
   const anchorLabel = typeof safeContext.anchor_label === "string" && safeContext.anchor_label.trim()
     ? safeContext.anchor_label.trim()
     : (impactType === "anchor_high"
-      ? classifyImpactTypeForEvent({ title: eventName, impact: "High" }).anchor_label
+      ? classifyImpactTypeForEvent({ title: eventName, impact: "High", country: safeContext.currency || safeContext.country || "USD" }).anchor_label
       : null);
   const clusterHasAnchor = safeContext.cluster_has_anchor === true || safeContext.contextual_anchor === true;
   const clusterAnchorNames = Array.isArray(safeContext.cluster_anchor_names)

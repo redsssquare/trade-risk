@@ -11,6 +11,7 @@ const {
   DIGEST_ANCHOR_EVENT_LINE,
   DIGEST_CLUSTER_EVENT_LINE,
   DIGEST_CLUSTER_ANCHOR_EVENT_LINE,
+  DIGEST_NFP_CLUSTER_LINE,
   DIGEST_CLOSING,
 } = require("./digest-phrases");
 
@@ -58,8 +59,8 @@ const TITLE_TRANSLATIONS = [
   { pattern: /beige book/i,                               ru: "Бежевая книга ФРС" },
 
   // ── США: рынок труда ──────────────────────────────────────────────────────
-  { pattern: /non.?farm (payroll|employment change)|nfp/i, ru: "Нонфарм (NFP)" },
   { pattern: /adp (non.?farm|employment change|nonfarm)/i, ru: "Занятость ADP" },
+  { pattern: /non.?farm (payroll|employment change)|nfp/i, ru: "Нонфарм (NFP)" },
   { pattern: /unemployment claims|initial (jobless )?claims/i, ru: "Заявки по безработице" },
   { pattern: /continuing (unemployment )?claims/i,        ru: "Повторные заявки по безработице" },
   { pattern: /unemployment rate/i,                        ru: "Уровень безработицы" },
@@ -309,7 +310,11 @@ function formatDailyDigest(events, opts = {}) {
 
     if (group.length > 1) {
       const isAnchorCluster = hasAnchor && group.some((x) => x.is_anchor);
-      const template = isAnchorCluster ? DIGEST_CLUSTER_ANCHOR_EVENT_LINE : DIGEST_CLUSTER_EVENT_LINE;
+      const isNfpCluster = isAnchorCluster && group.every((x) => {
+        const lbl = (x.anchor_label || "").toLowerCase();
+        return lbl === "nfp" || lbl === "non-farm payrolls";
+      });
+      const template = isNfpCluster ? DIGEST_NFP_CLUSTER_LINE : (isAnchorCluster ? DIGEST_CLUSTER_ANCHOR_EVENT_LINE : DIGEST_CLUSTER_EVENT_LINE);
       const line = template.replace("{time}", t).replace("{count}", group.length).replace("{geo}", geo);
       lines.push(line);
     } else {

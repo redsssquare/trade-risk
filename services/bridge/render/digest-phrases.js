@@ -66,6 +66,9 @@ const DIGEST_CLUSTER_EVENT_LINE = "{time} — Серия из {count} публи
 // ---- КЕЙС 5: Кластер публикаций + якорное событие ----
 const DIGEST_CLUSTER_ANCHOR_EVENT_LINE = "{time} — ⚡ Серия из {count} публикаций {geo}";
 
+// ---- КЕЙС 5b: Специальная строка для NFP-кластера ----
+const DIGEST_NFP_CLUSTER_LINE = "{time} — ⚡ Рынок труда США (Non-Farm Payrolls)";
+
 // ---- Единый closing для всех непустых кейсов ----
 const DIGEST_CLOSING = "Предупредим перед каждым окном.";
 
@@ -79,6 +82,7 @@ module.exports = {
   DIGEST_ANCHOR_EVENT_LINE,
   DIGEST_CLUSTER_EVENT_LINE,
   DIGEST_CLUSTER_ANCHOR_EVENT_LINE,
+  DIGEST_NFP_CLUSTER_LINE,
   DIGEST_CLOSING,
   DIGEST_MAX_CHARS,
 };

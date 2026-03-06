@@ -57,6 +57,37 @@ function run() {
         result.cluster_has_anchor === true &&
         Array.isArray(result.cluster_anchor_names) &&
         result.cluster_anchor_names.includes("Non-Farm Payrolls")
+    },
+    {
+      name: "ADP Nonfarm Employment Change => high (excluded from NFP)",
+      now: "2026-03-03T12:58:00Z",
+      events: [toEvent("ADP Nonfarm Employment Change", "2026-03-03T13:00:00Z", "High", "USD")],
+      check: (result) =>
+        result.impact_type === "high" &&
+        result.anchor_label === null
+    },
+    {
+      name: "Change in Nonfarm Payrolls USD => anchor",
+      now: "2026-03-03T13:28:00Z",
+      events: [toEvent("Change in Nonfarm Payrolls", "2026-03-03T13:30:00Z", "High", "USD")],
+      check: (result) =>
+        result.impact_type === "anchor_high" &&
+        (result.anchor_label === "NFP" || result.anchor_label === "Non-Farm Payrolls")
+    },
+    {
+      name: "Unemployment Rate + Average Hourly Earnings same slot => both anchor",
+      now: "2026-03-07T13:28:00Z",
+      events: [
+        toEvent("Unemployment Rate", "2026-03-07T13:30:00Z", "High", "USD"),
+        toEvent("Average Hourly Earnings", "2026-03-07T13:30:00Z", "High", "USD")
+      ],
+      check: (result) =>
+        result.impact_type === "anchor_high" &&
+        result.cluster_has_anchor === true &&
+        Array.isArray(result.cluster_anchor_names) &&
+        result.cluster_anchor_names.length >= 2 &&
+        result.cluster_anchor_names.includes("Unemployment Rate") &&
+        result.cluster_anchor_names.includes("Average Hourly Earnings")
     }
   ];
 

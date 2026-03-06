@@ -199,7 +199,8 @@ function runDryRun(moscowDateStr, payloads) {
     const withAnchor = highToday.map((item) => {
       const { impact_type, anchor_label } = classifyImpactTypeForEvent({
         title: item.title || "",
-        impact: item.impact || ""
+        impact: item.impact || "",
+        country: item.country || "USD"
       });
       return {
         ...item,
