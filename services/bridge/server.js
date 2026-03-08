@@ -44,7 +44,6 @@ const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : n
 const SIMULATION_NOW = process.env.SIMULATION_NOW || "";
 const PRE_EVENT_WINDOW_MS = 15 * 60 * 1000;
 const DURING_EVENT_WINDOW_MS = 5 * 60 * 1000;
-const POST_EVENT_WINDOW_MS = 15 * 60 * 1000; // post_event = 10 min (from event+5 to event+15)
 const FORBIDDEN_TELEGRAM_WORDS = [
   "рекомендуем",
   "будьте",
@@ -500,10 +499,6 @@ const resolvePhaseFromEventTime = (eventTimeMs, effectiveNowMs) => {
 
   if (eventTimeMs <= effectiveNowMs && effectiveNowMs < eventTimeMs + DURING_EVENT_WINDOW_MS) {
     return "during_event";
-  }
-
-  if (eventTimeMs + DURING_EVENT_WINDOW_MS <= effectiveNowMs && effectiveNowMs < eventTimeMs + POST_EVENT_WINDOW_MS) {
-    return "post_event";
   }
 
   return "none";
@@ -1232,6 +1227,17 @@ app.post("/hooks/event", async (req, res) => {
 
   console.log("[bridge:event]", JSON.stringify(logPayload, null, 2));
 
+  const isDryRun = req.headers["x-dry-run"] === "true";
+  if (isDryRun) {
+    return res.json({
+      status: "ok",
+      bridge: "received",
+      dry_run: true,
+      telegramMessage,
+      volatility_payload: volatilityPayload
+    });
+  }
+
   const eventChatId = getTelegramChatId();
   if (!(TELEGRAM_BOT_TOKEN || "").trim() || !eventChatId) {
     return res.status(500).json({
@@ -1280,6 +1286,4 @@ app.post("/hooks/event", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Bridge service listening on port ${PORT}`);
-});
-}`);
 });

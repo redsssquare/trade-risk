@@ -31,31 +31,32 @@ const PRE_EVENT = {
 
 const DURING_EVENT = {
   high: [
-    { first: "Выходят данные.", second: "Рынок начинает реагировать." },
-    { first: "Публикация началась.", second: "В рынке идёт движение." },
-    { first: "Данные вышли.", second: "Рынок переваривает цифры." },
-    { first: "Релиз опубликован.", second: "Рынок в фазе реакции." },
-    { first: "Статистика вышла.", second: "Цена отвечает на данные." },
-    { first: "Показатели опубликованы.", second: "Рынок реагирует на событие." },
+    { first: "🔴 {event_with_currency}.", second: "Публикация началась. В рынке идёт движение." },
+    { first: "🔴 {event_with_currency}.", second: "Рынок начинает реагировать." },
+    { first: "🔴 {event_with_currency}.", second: "В рынке идёт движение." },
+    { first: "🔴 {event_with_currency}.", second: "Рынок переваривает цифры." },
+    { first: "🔴 {event_with_currency}.", second: "Цена отвечает на данные." },
+    { first: "🔴 {event_with_currency}.", second: "Рынок в фазе реакции." },
   ],
   anchor: [
-    { first: "⚡ Публикуется {event}.", second: "Рынок начинает реагировать." },
-    { first: "⚡ Выходит {event}.", second: "В рынке идёт движение." },
-    { first: "⚡ {event} — данные вышли.", second: "Рынок отвечает на публикацию." },
-    { first: "⚡ Публикуется {event}.", second: "Рынок в фазе реакции." },
-    { first: "⚡ Выходит {event}.", second: "Рынок переваривает цифры." },
+    { first: "🔴 {event_with_currency}.", second: "Публикация началась. В рынке идёт движение." },
+    { first: "🔴 {event_with_currency}.", second: "Рынок начинает реагировать." },
+    { first: "🔴 {event_with_currency}.", second: "В рынке идёт движение." },
+    { first: "🔴 {event_with_currency}.", second: "Рынок переваривает цифры." },
+    { first: "🔴 {event_with_currency}.", second: "Цена отвечает на данные." },
   ],
   stack: [
-    { first: "Публикации идут подряд.", second: "Рынок реагирует на каждую из них." },
-    { first: "Выходит блок статистики.", second: "Идёт последовательная реакция." },
-    { first: "Данные выходят один за другим.", second: "Рынок отвечает на релизы." },
-    { first: "Идёт серия публикаций.", second: "В рынке сохраняется движение." },
+    { first: "🔴 Идёт {cluster_series}.", second: "В рынке сохраняется движение." },
+    { first: "🔴 Идёт {cluster_series}.", second: "Рынок реагирует на каждую из них." },
+    { first: "🔴 Идёт {cluster_series}.", second: "Идёт последовательная реакция." },
+    { first: "🔴 Идёт {cluster_series}.", second: "Рынок отвечает на релизы." },
+    { first: "🔴 Идёт {cluster_series}.", second: "Движения могут идти волнами." },
   ],
   anchorStack: [
-    { first: "⚡ Публикации идут подряд, включая {event}.", second: "Рынок реагирует на блок данных." },
-    { first: "⚡ Выходит серия данных, среди них {event}.", second: "В рынке идёт последовательная реакция." },
-    { first: "⚡ Публикуется блок статистики, включая {event}.", second: "Рынок отвечает на серию событий." },
-    { first: "⚡ Данные выходят подряд, включая {event}.", second: "Рынок переваривает публикации." },
+    { first: "🔴 Идёт {cluster_series}, включая {event}.", second: "В рынке сохраняется движение." },
+    { first: "🔴 Идёт {cluster_series}, включая {event}.", second: "Рынок реагирует на блок данных." },
+    { first: "🔴 Идёт {cluster_series}, включая {event}.", second: "Идёт последовательная реакция." },
+    { first: "🔴 Идёт {cluster_series}, включая {event}.", second: "Рынок отвечает на серию событий." },
   ],
 };
 
@@ -200,6 +201,28 @@ const currencyToFlag = (code) => {
   );
 };
 
+const getEventWithCurrency = (payload) => {
+  const eventName = getEventName(payload);
+  if (!eventName || eventName === "N/A") return "Публикация данных";
+  const primary = (payload && payload.currencies && payload.currencies[0]) || (payload && payload.currency) || (payload && payload.country);
+  if (!primary) return eventName;
+  const flag = currencyToFlag(primary);
+  return `${eventName} ${flag} ${primary}`.trim();
+};
+
+const getClusterCount = (payload) => {
+  if (!payload) return 1;
+  if (Number.isFinite(payload.cluster_size)) return payload.cluster_size;
+  if (Array.isArray(payload.cluster_events) && payload.cluster_events.length > 0) return payload.cluster_events.length;
+  return 1;
+};
+
+/** Фраза "серия из N публикаций" с цифрой */
+const getClusterSeriesPhrase = (payload) => {
+  const n = getClusterCount(payload);
+  return `серия из ${n} публикаций`;
+};
+
 const buildCurrencyLine = (payload) => {
   if (!payload || !Array.isArray(payload.currencies) || payload.currencies.length === 0) {
     return "";
@@ -213,11 +236,17 @@ const buildCurrencyLine = (payload) => {
 const applyPlaceholders = (phrase, payload, opts) => {
   const minutes = getSafeMinutes(payload);
   const event = getEventName(payload);
+  const eventWithCurrency = getEventWithCurrency(payload);
+  const clusterCount = getClusterCount(payload);
+  const clusterSeries = getClusterSeriesPhrase(payload);
   const time = getEventTimeFormatted(payload);
   const text = [phrase.first, phrase.second].join("\n");
   const filled = text
     .replace(/\{min\}/g, String(minutes))
     .replace(/\{event\}/g, event)
+    .replace(/\{event_with_currency\}/g, eventWithCurrency)
+    .replace(/\{cluster_count\}/g, String(clusterCount))
+    .replace(/\{cluster_series\}/g, clusterSeries)
     .replace(/\{time\}/g, time);
   const lines = filled.split("\n").map(capitalizeAfterEmoji).join("\n");
   if (opts && opts.appendCurrencies) {
@@ -250,4 +279,6 @@ module.exports = {
   getSafeMinutes,
   getEventName,
   getEventTimeFormatted,
+  getEventWithCurrency,
+  getClusterCount,
 };
