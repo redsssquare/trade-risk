@@ -26,7 +26,7 @@
 4. `Send to Bridge` -> `POST http://bridge:3000/hooks/event`
 5. Bridge -> OpenClaw -> Telegram
 
-**Daily digest:** отправляется только в тестовый канал. Задайте **TELEGRAM_TEST_CHANNEL_ID** (ID тестового чата/канала в Telegram) и при необходимости **OPENCLAW_GATEWAY_TOKEN**. Основной канал (OPENCLAW_TELEGRAM_CHAT_ID) для дайджеста не используется. Проверка пяти кейсов (пустой день, обычные события, якорь, кластер, кластер+якорь): [docs/daily-digest-test-cases.md](docs/daily-digest-test-cases.md), скрипт `scripts/send-daily-digest-test-cases.js`.
+**Daily digest:** отправляется только в тестовый канал. Задайте **TELEGRAM_TEST_CHANNEL_ID** (ID тестового чата/канала в Telegram) и при необходимости **OPENCLAW_GATEWAY_TOKEN**. Основной канал (OPENCLAW_TELEGRAM_CHAT_ID) для дайджеста не используется. Проверка пяти кейсов (пустой день, обычные события, якорь, кластер, кластер+якорь): [docs/daily-digest-test-cases.md](docs/daily-digest-test-cases.md), скрипт `scripts/send-daily-digest-test-cases.js`. Чеклист ручной проверки Daily workflow: [docs/daily-workflow-test-checklist.md](docs/daily-workflow-test-checklist.md).
 
 **TEST_CHANNEL:** переключатель режима отправки в Telegram. `TEST_CHANNEL=true` → отправка в **TELEGRAM_TEST_CHANNEL_ID** (тестовый канал); `TEST_CHANNEL=false` → в **OPENCLAW_TELEGRAM_CHAT_ID** (основной канал). Если `TEST_CHANNEL` не задан — используется fallback на **TELEGRAM_MODE** (`test` / `production`). Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
 
@@ -66,7 +66,6 @@
 - Фазы:
   - `pre_event`: 7 минут до первого события кластера
   - `during_event`: от начала кластера до конца последнего события + 4 мин
-  - `post_event`: 5 мин после during
 - Отправка в Telegram: только при смене состояния/фазы (плюс bootstrap при первом прогоне, если включен в workflow staticData).
 - Тестовый фид:
   - `CALENDAR_TEST_MODE=true` -> bridge читает `data/simulated_day.json`.

@@ -5,32 +5,35 @@
 Ниже матрица для ручной проверки логики `volatility_window` в n8n.
 Все времена в UTC.
 
-## Сценарий 1: Один обычный High (pre -> during -> post -> green)
+## Сценарий 1: Один обычный High (pre -> during -> green)
 
-Окна: pre 7 мин, during 4 мин, post 5 мин (event+4..event+9).
+Окна: pre 15 мин, during 5 мин (event..event+5). post_event удалён.
+Примечание: "German Ifo" — не anchor. "US Retail Sales" — anchor (есть алиас).
 
 | now | events (name, time, impact) | expected primary_event | expected phase | expected impact_type | contextual_anchor | contextual_anchor_names |
 |---|---|---|---|---|---|---|
-| 2026-03-03T11:55:00Z | US Retail Sales, 2026-03-03T12:00:00Z, High | US Retail Sales @ 12:00 | pre_event | high | false | [] |
-| 2026-03-03T12:01:00Z | US Retail Sales, 2026-03-03T12:00:00Z, High | US Retail Sales @ 12:00 | during_event | high | false | [] |
-| 2026-03-03T12:05:00Z | US Retail Sales, 2026-03-03T12:00:00Z, High | US Retail Sales @ 12:00 | post_event | high | false | [] |
-| 2026-03-03T12:10:00Z | US Retail Sales, 2026-03-03T12:00:00Z, High | null | none (GREEN) | null | false | [] |
+| 2026-03-03T09:25:00Z | German Ifo, 2026-03-03T09:30:00Z, High | German Ifo @ 09:30 | pre_event | high | false | [] |
+| 2026-03-03T09:31:00Z | German Ifo, 2026-03-03T09:30:00Z, High | German Ifo @ 09:30 | during_event | high | false | [] |
+| 2026-03-03T09:36:00Z | German Ifo, 2026-03-03T09:30:00Z, High | null | none (GREEN) | null | false | [] |
+| 2026-03-03T09:51:00Z | German Ifo, 2026-03-03T09:30:00Z, High | null | none (GREEN) | null | false | [] |
 
-## Сценарий 2: Один anchor_high (pre -> during -> post)
+## Сценарий 2: Один anchor_high (pre -> during -> green)
 
 | now | events (name, time, impact) | expected primary_event | expected phase | expected impact_type | contextual_anchor | contextual_anchor_names |
 |---|---|---|---|---|---|---|
 | 2026-03-03T13:55:00Z | FOMC Rate Decision, 2026-03-03T14:00:00Z, High | FOMC Rate Decision @ 14:00 | pre_event | anchor_high | false | [] |
 | 2026-03-03T14:02:00Z | FOMC Rate Decision, 2026-03-03T14:00:00Z, High | FOMC Rate Decision @ 14:00 | during_event | anchor_high | false | [] |
-| 2026-03-03T14:06:00Z | FOMC Rate Decision, 2026-03-03T14:00:00Z, High | FOMC Rate Decision @ 14:00 | post_event | anchor_high | false | [] |
+| 2026-03-03T14:06:00Z | FOMC Rate Decision, 2026-03-03T14:00:00Z, High | null | none (GREEN) | null | false | [] |
 
 ## Сценарий 3: High + anchor внутри одного окна
 
-CPI в 10:12 — в одном окне с UK GDP (10:03–10:15).
+CPI в 10:12 — в одном кластере с UK GDP (разница 2 мин ≤ 5 мин).
+Примечание: оба события передаются без явной country=GBP/EUR, поэтому CPI y/y классифицируется как anchor_high.
+Для contextual_anchor нужно чтобы primary был high, а CPI — отдельным anchor: это возможно только если UK GDP и CPI попадают в разные кластеры (>5 мин разница).
 
 | now | events (name, time, impact) | expected primary_event | expected phase | expected impact_type | contextual_anchor | contextual_anchor_names |
 |---|---|---|---|---|---|---|
-| 2026-03-03T10:05:00Z | UK GDP q/q, 2026-03-03T10:10:00Z, High; CPI y/y, 2026-03-03T10:12:00Z, High | UK GDP q/q @ 10:10 | pre_event | high | true | ["CPI y/y"] |
+| 2026-03-03T10:05:00Z | UK GDP q/q, 2026-03-03T10:10:00Z, High; CPI y/y, 2026-03-03T10:12:00Z, High | UK GDP q/q @ 10:10 | pre_event | anchor_high | false | [] |
 | 2026-03-03T10:12:00Z | UK GDP q/q, 2026-03-03T10:10:00Z, High; CPI y/y, 2026-03-03T10:12:00Z, High | CPI y/y @ 10:12 | during_event | anchor_high | false | [] |
 
 ## Сценарий 4: Два High подряд без anchor
@@ -47,12 +50,22 @@ CPI в 10:12 — в одном окне с UK GDP (10:03–10:15).
 | 2026-03-03T14:58:00Z | US ISM Services, 2026-03-03T15:00:00Z, High; FOMC Rate Decision, 2026-03-03T15:20:00Z, High | US ISM Services @ 15:00 | pre_event | high | false | [] |
 | 2026-03-03T15:14:00Z | US ISM Services, 2026-03-03T15:00:00Z, High; FOMC Rate Decision, 2026-03-03T15:20:00Z, High | FOMC Rate Decision @ 15:20 | pre_event | anchor_high | false | [] |
 
-## Сценарий 6: Событие уже прошло (post -> green)
+## Сценарий 6: Событие уже прошло (during -> green)
+
+При event=08:00 during заканчивается в 08:05. post_event удалён → GREEN сразу после during.
 
 | now | events (name, time, impact) | expected primary_event | expected phase | expected impact_type | contextual_anchor | contextual_anchor_names |
 |---|---|---|---|---|---|---|
-| 2026-03-03T08:05:00Z | CAD Employment Change, 2026-03-03T08:00:00Z, High | CAD Employment Change @ 08:00 | post_event | high | false | [] |
-| 2026-03-03T08:10:00Z | CAD Employment Change, 2026-03-03T08:00:00Z, High | null | none (GREEN) | null | false | [] |
+| 2026-03-03T08:05:00Z | CAD Employment Change, 2026-03-03T08:00:00Z, High | null | none (GREEN) | null | false | [] |
+| 2026-03-03T08:21:00Z | CAD Employment Change, 2026-03-03T08:00:00Z, High | null | none (GREEN) | null | false | [] |
+
+## Сценарий 7: Границы окна и mixed cluster (edge cases)
+
+| now | events (name, time, impact) | expected primary_event | expected phase | expected impact_type | contextual_anchor | contextual_anchor_names |
+|---|---|---|---|---|---|---|
+| 2026-03-03T13:44:00Z | CPI m/m, 2026-03-03T14:00:00Z, High | null | none (GREEN) | null | false | [] |
+| 2026-03-03T14:21:00Z | CPI m/m, 2026-03-03T14:00:00Z, High | null | none (GREEN) | null | false | [] |
+| 2026-03-03T13:46:00Z | CPI m/m, 2026-03-03T14:00:00Z, High; Retail Sales m/m, 2026-03-03T14:03:00Z, High | CPI m/m @ 14:00 | pre_event | anchor_high | false | [] |
 
 ## Manual Test Checklist
 
@@ -89,7 +102,7 @@ CPI в 10:12 — в одном окне с UK GDP (10:03–10:15).
 2. **Как подставить events JSON:** `[{"title":"US Retail Sales","date":"2026-03-03T12:00:00Z","impact":"High","currency":"USD"}]`.
 3. **Какие поля должны попасть в bridge:** `state`, `phase`, `context.event_name`, `context.event_time`, `context.impact_type`, `context.contextual_anchor`, `context.contextual_anchor_names`.
 4. **Какие логи проверить:** `workflow: volatility-state` и `bridge:event`.
-5. **Успех:** фазы идут `pre_event -> during_event -> post_event -> none`, `impact_type=high`, `contextual_anchor=false`.
+5. **Успех:** фазы идут `pre_event -> during_event -> none`, `impact_type=high`, `contextual_anchor=false`.
 6. **Ошибка:** фаза не совпадает с ожиданием, `GREEN` в окне, лишний `anchor_high`, некорректный `llm_called`.
 
 ### Сценарий 2: Один anchor_high (pre -> during -> post)
@@ -128,13 +141,13 @@ CPI в 10:12 — в одном окне с UK GDP (10:03–10:15).
 5. **Успех:** в `14:58` primary=`US ISM Services`, `impact_type=high`, `contextual_anchor=false`; в `15:14` primary=`FOMC Rate Decision`, `impact_type=anchor_high`, `contextual_anchor=false`.
 6. **Ошибка:** anchor не становится primary при приближении, или появляется неверный contextual anchor.
 
-### Сценарий 6: Событие уже прошло (post -> green)
+### Сценарий 6: Событие уже прошло (during -> green)
 
-1. **Как задать now вручную:** `2026-03-03T08:05:00Z`, затем `2026-03-03T08:10:00Z`.
+1. **Как задать now вручную:** `2026-03-03T08:02:00Z`, затем `2026-03-03T08:06:00Z`.
 2. **Как подставить events JSON:** `[{"title":"CAD Employment Change","date":"2026-03-03T08:00:00Z","impact":"High","currency":"CAD"}]`.
-3. **Какие поля должны попасть в bridge:** в `08:05` ожидается полный контекст, в `08:10` — `state=GREEN`, `phase=none`, `context=null`.
+3. **Какие поля должны попасть в bridge:** в `08:02` ожидается полный контекст (during_event), в `08:06` — `state=GREEN`, `phase=none`, `context=null`.
 4. **Какие логи проверить:** `transition_type`, `llm_called`, а также отсутствие active контекста на GREEN.
-5. **Успех:** `post_event -> none(GREEN)` без лишних intermediate состояний.
+5. **Успех:** `during_event -> none(GREEN)` без лишних intermediate состояний.
 6. **Ошибка:** остаётся `RED` после `event_time+5m` (post окно), или отправляется контекст для GREEN.
 
 ## Что проверять в логах bridge:event

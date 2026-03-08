@@ -64,4 +64,24 @@ describe("classifyImpactTypeForEvent", () => {
     assert.strictEqual(result.impact_type, "high");
     assert.strictEqual(result.anchor_label, null);
   });
+
+  it("CPI m/m EUR High → high (country constraint, anchor only for USD)", () => {
+    const result = classifyImpactTypeForEvent({
+      title: "CPI m/m",
+      country: "EUR",
+      impact: "High"
+    });
+    assert.strictEqual(result.impact_type, "high");
+    assert.strictEqual(result.anchor_label, null);
+  });
+
+  it("Retail Sales m/m GBP High → high (country constraint)", () => {
+    const result = classifyImpactTypeForEvent({
+      title: "Retail Sales m/m",
+      country: "GBP",
+      impact: "High"
+    });
+    assert.strictEqual(result.impact_type, "high");
+    assert.strictEqual(result.anchor_label, null);
+  });
 });

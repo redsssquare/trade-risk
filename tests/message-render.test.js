@@ -42,4 +42,20 @@ describe("renderTelegramTextTemplate", () => {
     const output = renderTelegramTextTemplate(payload);
     assert.ok(output.includes("⚡"), `Expected output to contain ⚡, got: ${output}`);
   });
+
+  it("mixed cluster: contextual_anchor true, cluster_anchor_names, primary high → output contains ⚡", () => {
+    const payload = {
+      state: "RED",
+      impact_type: "high",
+      contextual_anchor: true,
+      contextual_anchor_names: ["CPI m/m"],
+      cluster_has_anchor: true,
+      cluster_anchor_names: ["CPI m/m"],
+      cluster_size: 2,
+      phase: "pre_event",
+      minutes_to_event: 10,
+    };
+    const output = renderTelegramTextTemplate(payload);
+    assert.ok(output.includes("⚡"), `Expected output to contain ⚡ for mixed cluster, got: ${output}`);
+  });
 });

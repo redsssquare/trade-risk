@@ -8,6 +8,14 @@
 
 ### Added
 
+- **Workflow Test Cases** (2026-03-08)
+  - Расширены `tests/anchor-classification.test.js`: кейсы country constraints (CPI EUR, Retail Sales GBP).
+  - Расширены `tests/cluster-classification.test.js`: mixed cluster (Unemployment + CPI), кластер из 3 событий, `getClusterAnchorNames`.
+  - Новый `tests/volatility-window.test.js`: unit-тесты для `computeFromRawEvents` (фазы pre/during/post/none, границы окна).
+  - Расширены `docs/volatility_test_cases.md`: Сценарий 7 — границы окна и mixed cluster (edge cases).
+  - Расширены `tests/message-render.test.js`: mixed cluster (contextual_anchor=true) → ⚡.
+  - Новый `docs/daily-workflow-test-checklist.md`: чеклист ручной проверки Daily Digest (подмена calendar-feed, фильтр 9–21 МСК, проверка digest).
+
 - **TEST_CHANNEL env toggle** (2026-03-08)
   - Переменная `TEST_CHANNEL` (`true` / `false`) для выбора канала отправки: `true` → TELEGRAM_TEST_CHANNEL_ID, `false` → OPENCLAW_TELEGRAM_CHAT_ID.
   - При отсутствии `TEST_CHANNEL` используется fallback на `TELEGRAM_MODE` (обратная совместимость).
@@ -66,6 +74,9 @@
   - Цель: агенты в разных чатах не расходятся по форматам данных.
 
 ### Changed
+
+- **post_event удалён из volatility window** (2026-03-08)
+  - Убрана публикация фазы post_event. Оставшиеся публикации: pre_event, during_event, green.
 
 - **NFP Classification Fix — уточнённая логика** (2026-03-06)
   - NFP anchor применяется только к событиям с `country=USD` или `country=US`; события других стран не классифицируются как NFP.
