@@ -8,6 +8,16 @@
 
 ### Added
 
+- **TEST_CHANNEL env toggle** (2026-03-08)
+  - Переменная `TEST_CHANNEL` (`true` / `false`) для выбора канала отправки: `true` → TELEGRAM_TEST_CHANNEL_ID, `false` → OPENCLAW_TELEGRAM_CHAT_ID.
+  - При отсутствии `TEST_CHANNEL` используется fallback на `TELEGRAM_MODE` (обратная совместимость).
+  - Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
+
+- **Macro Notification Test Stabilization** (2026-03-08)
+  - **TELEGRAM_MODE** env var: `test` → отправка в TELEGRAM_TEST_CHANNEL_ID; `production` (по умолчанию) → в OPENCLAW_TELEGRAM_CHAT_ID. Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
+  - Новые тест-сьюты: `tests/anchor-classification.test.js` (6 кейсов), `tests/cluster-classification.test.js` (3 кейса), `tests/message-render.test.js` (3 кейса).
+  - `npm test` — запуск всех тестов через `node --test`.
+
 - **Верификация тестового прогона** (2026-02-22) — полный цикл успешно завершён: все фазы (pre_event, during_event, post_event) корректно отображены в Telegram, без дубликатов. Ручной smoke по [docs/stage1-test-run.md](stage1-test-run.md) пройден.
 
 - **Этап 6: Минимальные тест-кейсы перед merge** (2026-02-22) — завершён.

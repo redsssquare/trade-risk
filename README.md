@@ -28,6 +28,8 @@
 
 **Daily digest:** отправляется только в тестовый канал. Задайте **TELEGRAM_TEST_CHANNEL_ID** (ID тестового чата/канала в Telegram) и при необходимости **OPENCLAW_GATEWAY_TOKEN**. Основной канал (OPENCLAW_TELEGRAM_CHAT_ID) для дайджеста не используется. Проверка пяти кейсов (пустой день, обычные события, якорь, кластер, кластер+якорь): [docs/daily-digest-test-cases.md](docs/daily-digest-test-cases.md), скрипт `scripts/send-daily-digest-test-cases.js`.
 
+**TEST_CHANNEL:** переключатель режима отправки в Telegram. `TEST_CHANNEL=true` → отправка в **TELEGRAM_TEST_CHANNEL_ID** (тестовый канал); `TEST_CHANNEL=false` → в **OPENCLAW_TELEGRAM_CHAT_ID** (основной канал). Если `TEST_CHANNEL` не задан — используется fallback на **TELEGRAM_MODE** (`test` / `production`). Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
+
 Ключевые файлы:
 - `n8n-volatility-window-workflow.json` (единственный workflow-файл)
 - `services/bridge/server.js`, `services/bridge/render/` (шаблоны high/anchor_high)
@@ -109,6 +111,31 @@
 3. На переходе фазы `Compute` возвращает item (не пусто).
 4. `Send to Bridge` отработал `ok`.
 5. Сообщение пришло в Telegram.
+
+## Running Tests
+
+Run all tests (anchor-classification, cluster-classification, message-render):
+
+```bash
+npm test
+```
+
+Run with Telegram test channel (for scripts that send to Telegram, e.g. daily-digest, weekly-ahead):
+
+```bash
+TEST_CHANNEL=true npm test
+# or fallback: TELEGRAM_MODE=test npm test
+```
+
+**Test suites** (via `npm test`): `tests/anchor-classification.test.js` (6 cases), `tests/cluster-classification.test.js` (3 cases), `tests/message-render.test.js` (3 cases).
+
+Individual script-based suites:
+
+- `npm run test:volatility`
+- `npm run test:anchor-classifier`
+- `npm run test:render`
+
+**Note:** `npm test` uses Node.js built-in `node --test` (Node 18+). With Node 12, use the individual scripts above.
 
 ## 8) Формат задачи для нового агента (копировать в чат)
 

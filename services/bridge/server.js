@@ -18,7 +18,20 @@ const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 const OPENCLAW_TELEGRAM_CHAT_ID = process.env.OPENCLAW_TELEGRAM_CHAT_ID || "";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.OPENCLAW_TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_TEST_CHANNEL_ID = process.env.TELEGRAM_TEST_CHANNEL_ID || "";
+const TELEGRAM_MODE = String(process.env.TELEGRAM_MODE || "production").toLowerCase();
+const TEST_CHANNEL_RAW = process.env.TEST_CHANNEL;
+const TEST_CHANNEL = typeof TEST_CHANNEL_RAW === "string" && TEST_CHANNEL_RAW.trim() !== ""
+  ? String(TEST_CHANNEL_RAW).toLowerCase() === "true"
+  : false;
+const isTestMode = typeof TEST_CHANNEL_RAW === "string" && TEST_CHANNEL_RAW.trim() !== ""
+  ? TEST_CHANNEL
+  : (TELEGRAM_MODE === "test");
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "";
+function getTelegramChatId() {
+  return (isTestMode && TELEGRAM_TEST_CHANNEL_ID?.trim())
+    ? TELEGRAM_TEST_CHANNEL_ID.trim()
+    : OPENCLAW_TELEGRAM_CHAT_ID?.trim() || "";
+}
 const OPENCLAW_B2_TEST_MESSAGE = process.env.OPENCLAW_B2_TEST_MESSAGE || "[B2 TEST] POST -> bridge -> openclaw -> Telegram";
 const AI_ENABLED = String(process.env.AI_ENABLED || "false").toLowerCase() === "true";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
@@ -291,14 +304,13 @@ app.post("/daily-digest", async (req, res) => {
 
     const text = formatDailyDigest(withAnchor, { moscowDateStr });
 
-    if (!OPENCLAW_TELEGRAM_CHAT_ID || !OPENCLAW_TELEGRAM_CHAT_ID.trim()) {
+    const chatId = getTelegramChatId();
+    if (!chatId) {
       return res.status(503).json({
         status: "error",
-        error: "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
+        error: isTestMode ? "TELEGRAM_TEST_CHANNEL_ID is not configured (TELEGRAM_MODE=test)" : "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
       });
     }
-
-    const chatId = OPENCLAW_TELEGRAM_CHAT_ID.trim();
     const hasPhotoToken = !!(TELEGRAM_BOT_TOKEN || "").trim();
     let photoSent = false;
     let photoError = null;
@@ -367,10 +379,11 @@ app.post("/weekly-digest", async (req, res) => {
       });
     }
 
-    if (!OPENCLAW_TELEGRAM_CHAT_ID || !OPENCLAW_TELEGRAM_CHAT_ID.trim()) {
+    const chatId = getTelegramChatId();
+    if (!chatId) {
       return res.status(503).json({
         status: "error",
-        error: "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
+        error: isTestMode ? "TELEGRAM_TEST_CHANNEL_ID is not configured (TELEGRAM_MODE=test)" : "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
       });
     }
 
@@ -385,7 +398,7 @@ app.post("/weekly-digest", async (req, res) => {
       });
     }
 
-    await sendTelegramMessage(OPENCLAW_TELEGRAM_CHAT_ID.trim(), text);
+    await sendTelegramMessage(chatId, text);
 
     return res.json({
       status: "ok",
@@ -411,10 +424,11 @@ app.post("/weekly-ahead", async (req, res) => {
       });
     }
 
-    if (!OPENCLAW_TELEGRAM_CHAT_ID || !OPENCLAW_TELEGRAM_CHAT_ID.trim()) {
+    const targetChatId = getTelegramChatId();
+    if (!targetChatId) {
       return res.status(503).json({
         status: "error",
-        error: "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
+        error: isTestMode ? "TELEGRAM_TEST_CHANNEL_ID is not configured (TELEGRAM_MODE=test)" : "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
       });
     }
 
@@ -429,7 +443,6 @@ app.post("/weekly-ahead", async (req, res) => {
       });
     }
 
-    const targetChatId = OPENCLAW_TELEGRAM_CHAT_ID.trim();
     console.log("[bridge:weekly-ahead:send] target=" + (targetChatId ? targetChatId.slice(-6) + " (…)" : "MISSING"));
     await sendTelegramMessage(targetChatId, text);
 
@@ -517,16 +530,15 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
   const impactRaw = normalizeText(safeContext.impact || "High");
   const isHighImpactEvent = state === "RED" && (impactRaw === "high" || !impactRaw);
   const impactTypeFromContext = normalizeText(safeContext.impact_type);
+  const primaryCountry = String(safeContext.currency || safeContext.country || "").trim().toUpperCase();
   const fallbackClassification = classifyImpactTypeForEvent({
     title: eventName,
-    impact: isHighImpactEvent ? "High" : ""
+    impact: isHighImpactEvent ? "High" : "",
+    country: primaryCountry || undefined
   });
-  const impactType = impactTypeFromContext === "anchor_high" || impactTypeFromContext === "high"
+  const primaryImpactType = impactTypeFromContext === "anchor_high" || impactTypeFromContext === "high"
     ? impactTypeFromContext
     : (fallbackClassification.impact_type || "high");
-  const anchorLabel = typeof safeContext.anchor_label === "string" && safeContext.anchor_label.trim()
-    ? safeContext.anchor_label.trim()
-    : (impactType === "anchor_high" ? fallbackClassification.anchor_label : null);
   const clusterEvents = normalizeClusterEvents(safeContext.cluster_events);
   const clusterSize = Number.isFinite(safeContext.cluster_size)
     ? Math.max(0, Math.floor(safeContext.cluster_size))
@@ -540,23 +552,46 @@ const buildVolatilityPayload = (state, context, effectiveNowMs) => {
         .map((entry) => String(entry || "").trim())
         .filter(Boolean)
       : []);
-  const clusterAnchorNamesFromEvents = clusterEvents.length > 0
-    ? getClusterAnchorNames(clusterEvents.map((event) => ({
+  const clusterClassificationEvents = clusterEvents.length > 0
+    ? clusterEvents.map((event) => ({
       title: event.name,
-      impact: event.impact
-    })))
+      date: event.time,
+      impact: event.impact || "High",
+      country: event.currency || primaryCountry || "USD"
+    }))
+    : (eventName && eventTime
+      ? [{
+        title: eventName,
+        date: eventTime,
+        impact: isHighImpactEvent ? "High" : "",
+        country: primaryCountry || "USD"
+      }]
+      : []);
+  const clusterAnchorNamesFromEvents = clusterClassificationEvents.length > 0
+    ? getClusterAnchorNames(clusterClassificationEvents)
     : [];
   const clusterAnchorNames = clusterAnchorNamesFromContext.length > 0
     ? clusterAnchorNamesFromContext
     : clusterAnchorNamesFromEvents;
+  const derivedClusterHasAnchor = clusterAnchorNames.length > 0;
   const clusterHasAnchor = safeContext.cluster_has_anchor === true ||
     safeContext.contextual_anchor === true ||
-    clusterAnchorNames.length > 0;
-  const contextualAnchor = safeContext.contextual_anchor === true;
-  const contextualAnchorNames = Array.isArray(safeContext.contextual_anchor_names)
+    derivedClusterHasAnchor;
+  const impactType = clusterHasAnchor ? "anchor_high" : primaryImpactType;
+  const anchorLabelFromContext = typeof safeContext.anchor_label === "string" && safeContext.anchor_label.trim()
+    ? safeContext.anchor_label.trim()
+    : null;
+  const anchorLabel = anchorLabelFromContext ||
+    (primaryImpactType === "anchor_high" ? fallbackClassification.anchor_label : null) ||
+    (clusterHasAnchor ? clusterAnchorNames[0] || null : null);
+  const contextualAnchor = clusterHasAnchor && primaryImpactType !== "anchor_high";
+  const contextualAnchorNamesFromContext = Array.isArray(safeContext.contextual_anchor_names)
     ? safeContext.contextual_anchor_names
       .map((entry) => String(entry || "").trim())
       .filter(Boolean)
+    : [];
+  const contextualAnchorNames = contextualAnchor
+    ? (contextualAnchorNamesFromContext.length > 0 ? contextualAnchorNamesFromContext : clusterAnchorNames)
     : [];
   const primaryEvent = safeContext.primary_event && typeof safeContext.primary_event === "object"
     ? safeContext.primary_event
@@ -1213,10 +1248,13 @@ app.post("/hooks/event", async (req, res) => {
 
   console.log("[bridge:event]", JSON.stringify(logPayload, null, 2));
 
-  if (!OPENCLAW_GATEWAY_TOKEN || !OPENCLAW_TELEGRAM_CHAT_ID) {
+  const eventChatId = getTelegramChatId();
+  if (!OPENCLAW_GATEWAY_TOKEN || !eventChatId) {
     return res.status(500).json({
       status: "error",
-      error: "bridge missing OPENCLAW_GATEWAY_TOKEN or OPENCLAW_TELEGRAM_CHAT_ID"
+      error: isTestMode
+        ? "bridge missing OPENCLAW_GATEWAY_TOKEN or TELEGRAM_TEST_CHANNEL_ID (TELEGRAM_MODE=test)"
+        : "bridge missing OPENCLAW_GATEWAY_TOKEN or OPENCLAW_TELEGRAM_CHAT_ID"
     });
   }
 
@@ -1229,7 +1267,7 @@ app.post("/hooks/event", async (req, res) => {
       });
     }
 
-    const runtimeBody = await sendTelegramMessage(OPENCLAW_TELEGRAM_CHAT_ID, telegramMessage);
+    const runtimeBody = await sendTelegramMessage(eventChatId, telegramMessage);
 
     if (currentState != null && currentPhase != null) {
       try {

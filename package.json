@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "test:volatility": "node scripts/run-volatility-tests.js",
     "test:anchor-classifier": "node scripts/test-anchor-classification.js",
     "test:render": "node scripts/test-volatility-render.js",

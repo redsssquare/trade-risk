@@ -7,7 +7,10 @@
         "nfp",
         "non-farm payrolls",
         "non farm payrolls",
-        "nonfarm payrolls"
+        "nonfarm payrolls",
+        "non-farm employment change",
+        "non farm employment change",
+        "nonfarm employment change"
       ],
       "exclude": [
         "adp",
@@ -21,7 +24,15 @@
         "fomc rate decision",
         "fed rate decision",
         "federal reserve rate decision",
-        "federal funds rate decision"
+        "federal funds rate decision",
+        "fed interest rate decision",
+        "fomc interest rate decision",
+        "federal funds rate",
+        "federal reserve interest rate decision",
+        "fomc statement",
+        "fomc press conference",
+        "fomc economic projections",
+        "fomc meeting minutes"
       ]
     },
     {
@@ -31,7 +42,14 @@
         "us cpi",
         "us cpi m/m",
         "us cpi y/y",
-        "consumer price index"
+        "consumer price index",
+        "cpi",
+        "cpi m/m",
+        "cpi y/y",
+        "core cpi",
+        "core cpi m/m",
+        "core cpi y/y",
+        "headline cpi"
       ]
     },
     {
@@ -39,7 +57,9 @@
       "anchor_label": "ECB Rate Decision",
       "aliases": [
         "ecb rate decision",
-        "ecb interest rate decision"
+        "ecb interest rate decision",
+        "ecb interest rate",
+        "ecb deposit facility rate"
       ]
     },
     {
@@ -47,7 +67,9 @@
       "anchor_label": "BOE Rate Decision",
       "aliases": [
         "boe rate decision",
-        "bank of england rate decision"
+        "bank of england rate decision",
+        "boe interest rate decision",
+        "bank rate decision"
       ]
     },
     {
@@ -55,7 +77,9 @@
       "anchor_label": "BOJ Rate Decision",
       "aliases": [
         "boj rate decision",
-        "bank of japan rate decision"
+        "bank of japan rate decision",
+        "boj interest rate decision",
+        "bank of japan interest rate decision"
       ]
     },
     {
@@ -65,6 +89,37 @@
         "powell speech",
         "powell speaks",
         "fed chair powell"
+      ]
+    },
+    {
+      "key": "us_gdp_release",
+      "anchor_label": "US GDP",
+      "aliases": [
+        "gdp q/q",
+        "prelim gdp q/q",
+        "preliminary gdp q/q",
+        "final gdp q/q",
+        "advance gdp q/q",
+        "revised gdp q/q"
+      ]
+    },
+    {
+      "key": "us_retail_sales_release",
+      "anchor_label": "US Retail Sales",
+      "aliases": [
+        "retail sales",
+        "retail sales m/m",
+        "core retail sales",
+        "core retail sales m/m"
+      ]
+    },
+    {
+      "key": "us_ism_pmi_release",
+      "anchor_label": "US ISM PMI",
+      "aliases": [
+        "ism manufacturing pmi",
+        "ism services pmi",
+        "ism non-manufacturing pmi"
       ]
     }
   ]
