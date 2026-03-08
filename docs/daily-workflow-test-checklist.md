@@ -9,7 +9,7 @@
 ## Подготовка
 
 1. Запустите bridge: `cd services/bridge && npm start` (или через Docker).
-2. Убедитесь, что заданы `TELEGRAM_TEST_CHANNEL_ID`, `OPENCLAW_GATEWAY_TOKEN` (или `TELEGRAM_BOT_TOKEN`).
+2. Убедитесь, что заданы `TELEGRAM_TEST_CHANNEL_ID`, `TELEGRAM_BOT_TOKEN`.
 
 ---
 

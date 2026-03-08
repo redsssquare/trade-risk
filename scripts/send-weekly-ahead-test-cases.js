@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * Отправляет тестовые кейсы «Ритм недели» (Weekly Ahead) в Telegram.
- * Bridge отправляет в канал OPENCLAW_TELEGRAM_CHAT_ID (основной, как daily/weekly digest).
+ * Bridge отправляет в канал TELEGRAM_CHAT_ID (основной, как daily/weekly digest).
  * Usage: BRIDGE_URL=http://localhost:3000 node scripts/send-weekly-ahead-test-cases.js
  * DRY_RUN=1 — только формат и валидация, без отправки в Telegram.
  *
- * Перед запуском: в .env bridge задать OPENCLAW_TELEGRAM_CHAT_ID (ID канала).
+ * Перед запуском: в .env bridge задать TELEGRAM_CHAT_ID (ID канала).
  */
 
 const http = require("http");
@@ -189,7 +189,7 @@ async function main() {
   if (DRY_RUN) {
     console.log("[send-weekly-ahead-test-cases] DRY_RUN=1 — отправка в Telegram отключена.\n");
   } else {
-    console.log("[send-weekly-ahead-test-cases] Кейсы отправляются в OPENCLAW_TELEGRAM_CHAT_ID (основной канал).\n");
+    console.log("[send-weekly-ahead-test-cases] Кейсы отправляются в TELEGRAM_CHAT_ID (основной канал).\n");
   }
 
   let hasFailure = false;
@@ -222,7 +222,7 @@ async function main() {
         } else if (statusCode === 500) {
           console.log("[!] 500 — ошибка отправки:", body.error || "");
           if (body.details) console.log("    details:", JSON.stringify(body.details));
-          console.log("    Проверь: OPENCLAW_GATEWAY_TOKEN в bridge, openclaw runtime доступен, бот в канале.");
+          console.log("    Проверь: TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в bridge, бот в канале.");
         } else {
           console.log("[SKIP] POST →", statusCode, body.error || "");
         }
@@ -241,9 +241,9 @@ async function main() {
   console.log("[send-weekly-ahead-test-cases] Все кейсы обработаны. Проверь сообщения в тестовом Telegram-канале.");
   console.log("");
   console.log("Если сообщений нет:");
-  console.log("  • 503 → в .env bridge задай OPENCLAW_TELEGRAM_CHAT_ID (ID канала, например -100xxxxxxxxxx)");
-  console.log("  • 500 → в .env задай OPENCLAW_GATEWAY_TOKEN; проверь, что openclaw runtime доступен");
-  console.log("  • 200, но в Telegram пусто → бот должен быть админом в канале; OPENCLAW_TELEGRAM_CHAT_ID = ID канала (с минусом)");
+  console.log("  • 503 → в .env bridge задай TELEGRAM_CHAT_ID (ID канала, например -100xxxxxxxxxx)");
+  console.log("  • 500 → в .env задай TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID");
+  console.log("  • 200, но в Telegram пусто → бот должен быть админом в канале; TELEGRAM_CHAT_ID = ID канала (с минусом)");
 }
 
 main();

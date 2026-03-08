@@ -13,10 +13,8 @@ const { isWeeklyAheadPayload } = require("./render/weekly-ahead-payload");
 
 const app = express();
 const PORT = 3000;
-const OPENCLAW_RUNTIME_URL = process.env.OPENCLAW_RUNTIME_URL || "http://openclaw:18789/tools/invoke";
-const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
-const OPENCLAW_TELEGRAM_CHAT_ID = process.env.OPENCLAW_TELEGRAM_CHAT_ID || "";
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.OPENCLAW_TELEGRAM_BOT_TOKEN || "";
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_TEST_CHANNEL_ID = process.env.TELEGRAM_TEST_CHANNEL_ID || "";
 const TELEGRAM_MODE = String(process.env.TELEGRAM_MODE || "production").toLowerCase();
 const TEST_CHANNEL_RAW = process.env.TEST_CHANNEL;
@@ -30,9 +28,9 @@ const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "";
 function getTelegramChatId() {
   return (isTestMode && TELEGRAM_TEST_CHANNEL_ID?.trim())
     ? TELEGRAM_TEST_CHANNEL_ID.trim()
-    : OPENCLAW_TELEGRAM_CHAT_ID?.trim() || "";
+    : TELEGRAM_CHAT_ID?.trim() || "";
 }
-const OPENCLAW_B2_TEST_MESSAGE = process.env.OPENCLAW_B2_TEST_MESSAGE || "[B2 TEST] POST -> bridge -> openclaw -> Telegram";
+const B2_TEST_MESSAGE = process.env.B2_TEST_MESSAGE || "[B2 TEST] POST -> bridge -> Telegram";
 const AI_ENABLED = String(process.env.AI_ENABLED || "false").toLowerCase() === "true";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const AI_MODEL = process.env.AI_MODEL || "gpt-4o-mini";
@@ -308,7 +306,7 @@ app.post("/daily-digest", async (req, res) => {
     if (!chatId) {
       return res.status(503).json({
         status: "error",
-        error: isTestMode ? "TELEGRAM_TEST_CHANNEL_ID is not configured (TELEGRAM_MODE=test)" : "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
+        error: isTestMode ? "TELEGRAM_TEST_CHANNEL_ID is not configured (TELEGRAM_MODE=test)" : "TELEGRAM_CHAT_ID is not configured"
       });
     }
     const hasPhotoToken = !!(TELEGRAM_BOT_TOKEN || "").trim();
@@ -331,7 +329,7 @@ app.post("/daily-digest", async (req, res) => {
         await sendTelegramMessage(chatId, text);
       }
     } else {
-      photoError = "TELEGRAM_BOT_TOKEN (or OPENCLAW_TELEGRAM_BOT_TOKEN) not set";
+      photoError = "TELEGRAM_BOT_TOKEN not set";
       console.warn("[bridge:daily-digest] photo skipped:", photoError);
       await sendTelegramMessage(chatId, text);
     }
@@ -383,7 +381,7 @@ app.post("/weekly-digest", async (req, res) => {
     if (!chatId) {
       return res.status(503).json({
         status: "error",
-        error: isTestMode ? "TELEGRAM_TEST_CHANNEL_ID is not configured (TELEGRAM_MODE=test)" : "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
+        error: isTestMode ? "TELEGRAM_TEST_CHANNEL_ID is not configured (TELEGRAM_MODE=test)" : "TELEGRAM_CHAT_ID is not configured"
       });
     }
 
@@ -413,7 +411,7 @@ app.post("/weekly-digest", async (req, res) => {
   }
 });
 
-/** POST /weekly-ahead: спекы как у weekly-digest + опционально high_events_per_day; форматирует и отправляет в OPENCLAW_TELEGRAM_CHAT_ID (основной канал). */
+/** POST /weekly-ahead: спекы как у weekly-digest + опционально high_events_per_day; форматирует и отправляет в TELEGRAM_CHAT_ID (основной канал). */
 app.post("/weekly-ahead", async (req, res) => {
   try {
     const payload = req.body;
@@ -428,7 +426,7 @@ app.post("/weekly-ahead", async (req, res) => {
     if (!targetChatId) {
       return res.status(503).json({
         status: "error",
-        error: isTestMode ? "TELEGRAM_TEST_CHANNEL_ID is not configured (TELEGRAM_MODE=test)" : "OPENCLAW_TELEGRAM_CHAT_ID is not configured"
+        error: isTestMode ? "TELEGRAM_TEST_CHANNEL_ID is not configured (TELEGRAM_MODE=test)" : "TELEGRAM_CHAT_ID is not configured"
       });
     }
 
@@ -919,40 +917,26 @@ const generateMessageWithLlm = async (volatilityPayload) => {
 };
 
 const sendTelegramMessage = async (targetChatId, message) => {
-  if (!OPENCLAW_GATEWAY_TOKEN || !targetChatId) {
-    throw new Error("missing OPENCLAW_GATEWAY_TOKEN or target chat id");
+  const token = (TELEGRAM_BOT_TOKEN || "").trim();
+  if (!token || !targetChatId) {
+    throw new Error("missing TELEGRAM_BOT_TOKEN or target chat id");
   }
 
-  const runtimeResponse = await fetch(OPENCLAW_RUNTIME_URL, {
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      tool: "message",
-      action: "send",
-      sessionKey: "main",
-      args: {
-        channel: "telegram",
-        target: targetChatId,
-        message
-      }
-    })
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: targetChatId, text: message })
   });
 
-  const runtimeBody = await runtimeResponse.json().catch(() => ({}));
-  if (!runtimeResponse.ok || runtimeBody.ok !== true) {
-    const details = {
-      status: runtimeResponse.status,
-      body: runtimeBody
-    };
-    const error = new Error("openclaw send failed");
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body.ok !== true) {
+    const details = { status: response.status, body };
+    const error = new Error("telegram sendMessage failed");
     error.details = details;
     throw error;
   }
 
-  return runtimeBody;
+  return body;
 };
 
 const TELEGRAM_CAPTION_MAX_LENGTH = 1024;
@@ -1136,7 +1120,7 @@ app.post("/hooks/event", async (req, res) => {
   const isVolatilityTick =
     incomingEventType === "volatility.tick" &&
     (incomingState === "RED" || incomingState === "GREEN");
-  let telegramMessage = OPENCLAW_B2_TEST_MESSAGE;
+  let telegramMessage = B2_TEST_MESSAGE;
   let llmLog = null;
   let volatilityPayload = null;
   let llmCalled = false;
@@ -1249,12 +1233,12 @@ app.post("/hooks/event", async (req, res) => {
   console.log("[bridge:event]", JSON.stringify(logPayload, null, 2));
 
   const eventChatId = getTelegramChatId();
-  if (!OPENCLAW_GATEWAY_TOKEN || !eventChatId) {
+  if (!(TELEGRAM_BOT_TOKEN || "").trim() || !eventChatId) {
     return res.status(500).json({
       status: "error",
       error: isTestMode
-        ? "bridge missing OPENCLAW_GATEWAY_TOKEN or TELEGRAM_TEST_CHANNEL_ID (TELEGRAM_MODE=test)"
-        : "bridge missing OPENCLAW_GATEWAY_TOKEN or OPENCLAW_TELEGRAM_CHAT_ID"
+        ? "bridge missing TELEGRAM_BOT_TOKEN or TELEGRAM_TEST_CHANNEL_ID (TELEGRAM_MODE=test)"
+        : "bridge missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID"
     });
   }
 
@@ -1267,7 +1251,7 @@ app.post("/hooks/event", async (req, res) => {
       });
     }
 
-    const runtimeBody = await sendTelegramMessage(eventChatId, telegramMessage);
+    const telegramResult = await sendTelegramMessage(eventChatId, telegramMessage);
 
     if (currentState != null && currentPhase != null) {
       try {
@@ -1282,10 +1266,10 @@ app.post("/hooks/event", async (req, res) => {
     return res.json({
       status: "ok",
       bridge: "received",
-      openclaw: runtimeBody.result && runtimeBody.result.details ? runtimeBody.result.details : runtimeBody
+      telegram: telegramResult
     });
   } catch (error) {
-    console.error("[bridge:openclaw:exception]", error && error.details ? JSON.stringify(error.details, null, 2) : error);
+    console.error("[bridge:telegram:exception]", error && error.details ? JSON.stringify(error.details, null, 2) : error);
     return res.status(502).json({
       status: "error",
       bridge: "received",
@@ -1296,4 +1280,6 @@ app.post("/hooks/event", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Bridge service listening on port ${PORT}`);
+});
+}`);
 });

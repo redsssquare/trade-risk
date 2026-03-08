@@ -20,7 +20,7 @@ Compute Volatility State (n8n code node)
     ↓
 POST /hooks/event (Bridge)
     ↓
-OpenClaw → Telegram
+Bridge → Telegram
 ```
 
 ---

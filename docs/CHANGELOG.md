@@ -17,12 +17,12 @@
   - Новый `docs/daily-workflow-test-checklist.md`: чеклист ручной проверки Daily Digest (подмена calendar-feed, фильтр 9–21 МСК, проверка digest).
 
 - **TEST_CHANNEL env toggle** (2026-03-08)
-  - Переменная `TEST_CHANNEL` (`true` / `false`) для выбора канала отправки: `true` → TELEGRAM_TEST_CHANNEL_ID, `false` → OPENCLAW_TELEGRAM_CHAT_ID.
+  - Переменная `TEST_CHANNEL` (`true` / `false`) для выбора канала отправки: `true` → TELEGRAM_TEST_CHANNEL_ID, `false` → TELEGRAM_CHAT_ID.
   - При отсутствии `TEST_CHANNEL` используется fallback на `TELEGRAM_MODE` (обратная совместимость).
   - Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
 
 - **Macro Notification Test Stabilization** (2026-03-08)
-  - **TELEGRAM_MODE** env var: `test` → отправка в TELEGRAM_TEST_CHANNEL_ID; `production` (по умолчанию) → в OPENCLAW_TELEGRAM_CHAT_ID. Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
+  - **TELEGRAM_MODE** env var: `test` → отправка в TELEGRAM_TEST_CHANNEL_ID; `production` (по умолчанию) → в TELEGRAM_CHAT_ID. Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
   - Новые тест-сьюты: `tests/anchor-classification.test.js` (6 кейсов), `tests/cluster-classification.test.js` (3 кейса), `tests/message-render.test.js` (3 кейса).
   - `npm test` — запуск всех тестов через `node --test`.
 
@@ -86,6 +86,12 @@
   - pre: 20–30 мин → 7 мин, during: 5 мин → 4 мин, post: 15 мин → 5 мин (event+4..event+9).
   - Чтобы живой тест проходил за ~16 мин вместо ~40 мин.
   - Обновлены: n8n workflow, bridge, lib/volatility-compute, volatility_test_cases.md.
+
+### Removed
+
+- **OpenClaw** (2026-03-08)
+  - Bridge теперь отправляет сообщения напрямую в Telegram через Bot API. Удалён сервис openclaw из docker-compose, директория `services/openclaw` удалена.
+  - Env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (вместо `OPENCLAW_*`).
 
 ### Fixed
 

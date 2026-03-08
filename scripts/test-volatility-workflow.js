@@ -389,7 +389,7 @@ async function testSection56() {
   {
     const body = makeRedPayload("pre_event", 20);
     const r = await postEvent(body);
-    // Bridge returns 500 when OPENCLAW tokens are missing (expected in test env) or 200/skipped
+    // Bridge returns 500 when TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID are missing (expected in test env) or 200/skipped
     const acceptable = r.status === 200 || r.status === 500;
     acceptable ? pass("5.1", `POST pre_event → HTTP ${r.status}`) : fail("5.1", `unexpected HTTP ${r.status}`);
 

@@ -24,11 +24,11 @@
 2. `Fetch Calendar` -> `GET http://bridge:3000/calendar-feed`
 3. `Compute Volatility State` (фазы/состояния)
 4. `Send to Bridge` -> `POST http://bridge:3000/hooks/event`
-5. Bridge -> OpenClaw -> Telegram
+5. Bridge -> Telegram
 
-**Daily digest:** отправляется только в тестовый канал. Задайте **TELEGRAM_TEST_CHANNEL_ID** (ID тестового чата/канала в Telegram) и при необходимости **OPENCLAW_GATEWAY_TOKEN**. Основной канал (OPENCLAW_TELEGRAM_CHAT_ID) для дайджеста не используется. Проверка пяти кейсов (пустой день, обычные события, якорь, кластер, кластер+якорь): [docs/daily-digest-test-cases.md](docs/daily-digest-test-cases.md), скрипт `scripts/send-daily-digest-test-cases.js`. Чеклист ручной проверки Daily workflow: [docs/daily-workflow-test-checklist.md](docs/daily-workflow-test-checklist.md).
+**Daily digest:** отправляется только в тестовый канал. Задайте **TELEGRAM_TEST_CHANNEL_ID** (ID тестового чата/канала в Telegram) и **TELEGRAM_BOT_TOKEN**. Основной канал (TELEGRAM_CHAT_ID) для дайджеста не используется. Проверка пяти кейсов (пустой день, обычные события, якорь, кластер, кластер+якорь): [docs/daily-digest-test-cases.md](docs/daily-digest-test-cases.md), скрипт `scripts/send-daily-digest-test-cases.js`. Чеклист ручной проверки Daily workflow: [docs/daily-workflow-test-checklist.md](docs/daily-workflow-test-checklist.md).
 
-**TEST_CHANNEL:** переключатель режима отправки в Telegram. `TEST_CHANNEL=true` → отправка в **TELEGRAM_TEST_CHANNEL_ID** (тестовый канал); `TEST_CHANNEL=false` → в **OPENCLAW_TELEGRAM_CHAT_ID** (основной канал). Если `TEST_CHANNEL` не задан — используется fallback на **TELEGRAM_MODE** (`test` / `production`). Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
+**TEST_CHANNEL:** переключатель режима отправки в Telegram. `TEST_CHANNEL=true` → отправка в **TELEGRAM_TEST_CHANNEL_ID** (тестовый канал); `TEST_CHANNEL=false` → в **TELEGRAM_CHAT_ID** (основной канал). Если `TEST_CHANNEL` не задан — используется fallback на **TELEGRAM_MODE** (`test` / `production`). Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
 
 Ключевые файлы:
 - `n8n-volatility-window-workflow.json` (единственный workflow-файл)

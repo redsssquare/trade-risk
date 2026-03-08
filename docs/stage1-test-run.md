@@ -93,7 +93,7 @@ docker compose up -d
 docker compose restart
 ```
 
-**Ожидаемый вывод:** идут строки про загрузку/перезапуск контейнеров `bridge`, `n8n`, `openclaw`. Завершение без красных ошибок — нормально.
+**Ожидаемый вывод:** идут строки про загрузку/перезапуск контейнеров `bridge`, `n8n`. Завершение без красных ошибок — нормально.
 
 ---
 
@@ -113,7 +113,7 @@ docker compose restart
 
 ### Шаг 5. Ждать сообщения в Telegram
 
-**Где:** Telegram-канал/чат, указанный в `OPENCLAW_TELEGRAM_CHAT_ID`.
+**Где:** Telegram-канал/чат, указанный в `TELEGRAM_CHAT_ID`.
 
 **Схема времени (если шаг 1 выполнен сейчас):**
 
@@ -181,7 +181,7 @@ node scripts/update-test-event.js
 CALENDAR_TEST_MODE=true
 ```
 
-(И `OPENCLAW_TELEGRAM_CHAT_ID`, `OPENCLAW_GATEWAY_TOKEN` и т.д., если ещё не настроены. Для тестового канала/дайджеста: `TELEGRAM_TEST_CHANNEL_ID`, см. `.env.example`.)
+(И `TELEGRAM_CHAT_ID`, `TELEGRAM_BOT_TOKEN` и т.д., если ещё не настроены. Для тестового канала/дайджеста: `TELEGRAM_TEST_CHANNEL_ID`, см. `.env.example`.)
 
 ### 3. Перезапустить стек
 
