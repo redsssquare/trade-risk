@@ -11,6 +11,7 @@ COPY --chown=node:node services/bridge/package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --chown=node:node lib ./lib
+COPY --chown=node:node utils /utils
 COPY --chown=node:node services/bridge .
 
 # Права на /app/bridge-state задаёт entrypoint (чтобы node мог писать в volume)

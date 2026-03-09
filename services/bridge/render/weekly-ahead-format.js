@@ -30,6 +30,7 @@ const {
   MAX_LINES,
   WEEKLY_AHEAD_FORBIDDEN_WORDS,
 } = require("./weekly-ahead-phrases");
+const { pluralRu } = require("../../../utils/pluralRu");
 
 /** Баллы: anchor*3 + high*1 + clusters*2 + busy_day_bonus (как в Weekly End) */
 function getScore(payload) {
@@ -54,16 +55,6 @@ function applyQuietDowngrade(level, quietDaysCount) {
   if (level === LEVEL_SATURATED) return LEVEL_MODERATE;
   if (level === LEVEL_MODERATE) return LEVEL_CALM;
   return LEVEL_CALM;
-}
-
-/** Склонение для русского: one (1), few (2-4), many (0,5-20,21-24...) */
-function pluralRu(n, one, few, many) {
-  const x = Math.abs(Number(n)) % 100;
-  const d = x % 10;
-  if (x >= 11 && x <= 14) return many;
-  if (d === 1) return one;
-  if (d >= 2 && d <= 4) return few;
-  return many;
 }
 
 /** Нормализует диапазон дат в заголовок: "03–07.03" → "03.03–07.03" (формат 03.03–07.03) */
@@ -195,7 +186,7 @@ function formatWeeklyAhead(payload) {
         : LEVEL_CALM_PHRASES;
   blocks.push(levelPhrases[v % levelPhrases.length] || levelPhrases[0]);
 
-  // Блок 3: метрики (high, anchor, clusters)
+  // Блок 3: метрики (high, anchor, clusters) — отдельным списком
   const metricLines = [];
   if (highEvents > 0) {
     metricLines.push(getHighEventsLine(highEvents));
@@ -208,7 +199,8 @@ function formatWeeklyAhead(payload) {
     metricLines.push(ANCHOR_TWO_PHRASES[v % ANCHOR_TWO_PHRASES.length] || ANCHOR_TWO_PHRASES[0]);
   } else {
     const manyPhrase = ANCHOR_MANY_PHRASES[v % ANCHOR_MANY_PHRASES.length] || ANCHOR_MANY_PHRASES[0];
-    metricLines.push(manyPhrase.replace("{n}", String(anchorEvents)));
+    const anchorWord = pluralRu(anchorEvents, "ключевое событие", "ключевых события", "ключевых событий");
+    metricLines.push(manyPhrase.replace("{n} ключевых событий", `${anchorEvents} ${anchorWord}`));
   }
   if (clusters === 0) {
     metricLines.push(CLUSTERS_ZERO_PHRASES[v % CLUSTERS_ZERO_PHRASES.length] || CLUSTERS_ZERO_PHRASES[0]);
@@ -217,7 +209,12 @@ function formatWeeklyAhead(payload) {
   } else {
     metricLines.push(CLUSTERS_TWO_PHRASES[v % CLUSTERS_TWO_PHRASES.length] || CLUSTERS_TWO_PHRASES[0]);
   }
-  blocks.push(metricLines.join("\n"));
+  const metricList = metricLines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `• ${line}`)
+    .join("\n");
+  blocks.push(metricList);
 
   // Блок 4: распределение по неделе
   const distributionPhrases =

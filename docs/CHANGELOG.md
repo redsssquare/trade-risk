@@ -8,6 +8,24 @@
 
 ### Added
 
+- **Russian pluralization helper (pluralRu)** (2026-03-09)
+  - `utils/pluralRu.js` — общий хелпер склонения числительных: `pluralRu(n, one, few, many)` возвращает форму по правилам русского языка (1→one, 2–4→few, 5+→many, с учётом 11–14).
+  - Применён во всех render-модулях: weekly-end-format, weekly-ahead-format, phrases, templates (high, anchor_high), digest-format, digest-image, telegram-render.
+
+- **Scenario Testing Suite** (2026-03-08)
+  - `scripts/run-all-scenario-tests.js` — мастер-скрипт последовательного запуска 4 сценариев тестирования с паузой 2.5 сек между ними.
+  - `docs/scenario-testing-guide.md` — руководство по сценарному тестированию с таблицами кейсов и чеклистом ручной проверки.
+  - Метки `_caseType` в `send-weekly-ahead-test-cases.js` и `send-weekly-digest-test.js` для маппинга типов кейсов.
+  - Сценарии S5–S10 в `send-volatility-test-events.js` (full coverage: high, anchor, stack, anchorStack × pre_event/during_event).
+  - `SCENARIO_MODE=1` в `send-daily-digest-test-cases.js` — режим быстрого запуска (5 кейсов из 16).
+
+- **LLM Text Finalizer** (2026-03-08)
+  - LLM-полиш текста перед отправкой в Telegram для трёх digest-эндпоинтов: `/daily-digest`, `/weekly-digest`, `/weekly-ahead`.
+  - Форматированный текст опционально полируется LLM (грамматика, стиль). При любой ошибке — fallback на оригинал.
+  - Константа `LLM_POLISH_SYSTEM_PROMPT`, функция `polishTextWithLlm(rawText, contextPayload)`.
+  - В meta ответа добавлено поле `llm_polish: true/false` для всех трёх эндпоинтов.
+  - При `AI_ENABLED=false` или отсутствии API-ключа LLM не вызывается, `llm_polish: false`.
+
 - **Workflow Test Cases** (2026-03-08)
   - Расширены `tests/anchor-classification.test.js`: кейсы country constraints (CPI EUR, Retail Sales GBP).
   - Расширены `tests/cluster-classification.test.js`: mixed cluster (Unemployment + CPI), кластер из 3 событий, `getClusterAnchorNames`.
@@ -75,6 +93,18 @@
 
 ### Changed
 
+- **Numeric phrases use pluralRu** (2026-03-09)
+  - Все числовые фразы (события, публикации, минуты, интервалы) в render-шаблонах переведены на использование `pluralRu` вместо хардкода форм.
+
+- **Digest response meta: llm_polish** (2026-03-08)
+  - Ответы `/daily-digest`, `/weekly-digest`, `/weekly-ahead` теперь включают в meta поле `llm_polish: true/false`, указывающее, был ли применён LLM-полиш к тексту перед отправкой.
+
+- **During Event Publication Name** (2026-03-08)
+  - during_event messages now include publication name and currency in the first line.
+  - Fixed 🔴 emoji at the start of the first line for during_event.
+  - Templates: single event → "🔴 {event} 🇺🇸 USD"; series → "🔴 Идёт серия публикаций (N)"; anchor series → "🔴 Идёт серия публикаций (N), включая {anchor}".
+  - Template mode only (AI_ENABLED=false by default).
+
 - **post_event удалён из volatility window** (2026-03-08)
   - Убрана публикация фазы post_event. Оставшиеся публикации: pre_event, during_event, green.
 
@@ -94,6 +124,17 @@
   - Env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (вместо `OPENCLAW_*`).
 
 ### Fixed
+
+- **Russian plural forms in Telegram messages** (2026-03-09)
+  - Исправлены грамматические ошибки: «2 ключевых событий» → «2 ключевых события», «Через 1 минут» → «Через 1 минуту», «3 плотных интервала» (вместо «2 плотных интервала» для clusters=3), «Запланировано N событий» с корректными формами.
+
+- **Weekly-End Bug Fixes** (2026-03-08)
+  - `digest-format.js`: события с невалидными датами (`??:??`) пропускаются.
+  - `weekly-end-phrases.js`: DISTRIBUTION_ONE_PHRASES в винительном падеже; заменены запрещённые фразы (режим, контроль); «режим» добавлен в WEEKLY_FORBIDDEN_WORDS.
+  - `weekly-end-format.js`: `formatWeeklyEnd` возвращает `{ text, levelKey }`; `validateWeeklyEnd` использует `levelKey`; фразы распределения всегда в винительном падеже; экспорт `getWeeklyEndLevel`.
+  - `weekly-ahead-phrases.js`: «режим» добавлен в WEEKLY_AHEAD_FORBIDDEN_WORDS.
+  - `server.js`: деструктуризация `formatWeeklyEnd`, передача `levelKey` в `validateWeeklyEnd`.
+  - `test-text-templates.js`: исправлены fixtures, валидация через `levelKey`.
 
 - **NFP false positives для не-US событий и ADP** (2026-03-06)
   - События с названиями, похожими на NFP, но с `country` отличным от USD/US, больше не помечаются как anchor.

@@ -93,7 +93,7 @@ function fail(id, reason) {
 async function postEvent(body) {
   const resp = await fetchCompat(`${BRIDGE_URL}/hooks/event`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Dry-Run": "true" },
     body: JSON.stringify(body)
   });
   const json = await resp.json().catch(() => ({}));
@@ -162,13 +162,11 @@ function testSection1() {
 
 const PRE_WINDOW_MS = 15 * 60 * 1000;
 const DURING_WINDOW_MS = 5 * 60 * 1000;
-const POST_WINDOW_MS = 15 * 60 * 1000;
 const CLUSTER_WINDOW_MS = 5 * 60 * 1000;
 
 function resolveClusterPhase(clusterStartMs, clusterEndMs, ts) {
   if (clusterStartMs - PRE_WINDOW_MS <= ts && ts < clusterStartMs) return "pre_event";
   if (clusterStartMs <= ts && ts < clusterEndMs + DURING_WINDOW_MS) return "during_event";
-  if (clusterEndMs + DURING_WINDOW_MS <= ts && ts < clusterEndMs + POST_WINDOW_MS) return "post_event";
   return "none";
 }
 
@@ -232,17 +230,12 @@ function testSection3() {
     (r.state === "RED" && r.phase === "pre_event") ? pass("3.1", `RED/pre_event ✓`) : fail("3.1", `got ${r.state}/${r.phase}`);
   }
 
-  // 3.2 One High -10 min (post_event, 10 min after event end+5) → post_event RED
-  // post window: event+5 to event+15 min; event was 10 min ago → nowMs - eventMs = 10 min
-  // clusterEndMs = eventMs; resolveClusterPhase: if clusterEnd+5 <= now < clusterEnd+15 → post_event
-  // clusterEnd+5 = event-10+5 = event-5; clusterEnd+15 = event+5. now = event+10.
-  // actually: event was 10 min ago → eventMs = nowMs - 10min
-  // during: eventMs <= ts < eventMs+5min → nowMs falls inside eventMs+10 which is NOT < eventMs+5 → not during
-  // post: eventMs+5 <= ts < eventMs+15 → eventMs+10 is in [eventMs+5, eventMs+15) → post_event ✓
+  // 3.2 One High -10 min (10 min after event) → GREEN (post_event removed)
+  // event was 10 min ago: during window = event to event+5min → nowMs = event+10min → outside during → GREEN
   {
     const items = [makeItem(-10, nowMs)]; // 10 min ago
     const r = computeVolatility(nowMs, items);
-    (r.state === "RED" && r.phase === "post_event") ? pass("3.2", `RED/post_event ✓`) : fail("3.2", `got ${r.state}/${r.phase}`);
+    (r.state === "GREEN") ? pass("3.2", `GREEN after during_event expired ✓`) : fail("3.2", `got ${r.state}/${r.phase}`);
   }
 
   // 3.3 One High +2 min → during_event (within 5 min window of event start)
@@ -318,8 +311,7 @@ function testSection4() {
     { id: "4.2", prev: [null, null, false], next: ["GREEN", "none"], expect: true, note: "first run GREEN → changed" },
     { id: "4.3", prev: ["RED", "pre_event", true], next: ["RED", "pre_event"], expect: false, note: "same state/phase → no change" },
     { id: "4.4", prev: ["RED", "pre_event", true], next: ["RED", "during_event"], expect: true, note: "phase change → changed" },
-    { id: "4.5", prev: ["RED", "during_event", true], next: ["RED", "post_event"], expect: true, note: "during→post → changed" },
-    { id: "4.6", prev: ["RED", "post_event", true], next: ["GREEN", "none"], expect: true, note: "RED→GREEN → changed" },
+    { id: "4.5", prev: ["RED", "during_event", true], next: ["GREEN", "none"], expect: true, note: "during→GREEN (no post_event) → changed" },
     { id: "4.7", prev: ["GREEN", "none", true], next: ["RED", "pre_event"], expect: true, note: "GREEN→RED → changed" },
     { id: "4.8", prev: ["GREEN", "none", true], next: ["GREEN", "none"], expect: false, note: "GREEN same → no change" },
   ];
@@ -385,56 +377,61 @@ async function testSection56() {
   }
   pass("5.0", `Bridge reachable at ${BRIDGE_URL}`);
 
-  // 5.1 / 6.2 — RED pre_event
+  // 5.1 — RED pre_event (dry-run: no Telegram send)
   {
     const body = makeRedPayload("pre_event", 20);
     const r = await postEvent(body);
-    // Bridge returns 500 when TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID are missing (expected in test env) or 200/skipped
-    const acceptable = r.status === 200 || r.status === 500;
-    acceptable ? pass("5.1", `POST pre_event → HTTP ${r.status}`) : fail("5.1", `unexpected HTTP ${r.status}`);
+    r.status === 200 && r.json.dry_run === true
+      ? pass("5.1", `POST pre_event → HTTP 200, dry_run ✓`)
+      : fail("5.1", `unexpected status=${r.status} dry_run=${r.json && r.json.dry_run}`);
 
-    // If 200 and has telegramMessage in log — validate via render
-    if (r.status === 200 && r.json && r.json.skipped === "duplicate_state_phase") {
-      pass("6.8-pre", "duplicate_state_phase skipped correctly");
+    // Validate the generated message text
+    if (r.json && r.json.telegramMessage) {
+      const vp = r.json.volatility_payload || {};
+      const v = validateTelegramText(r.json.telegramMessage, vp);
+      v.ok
+        ? pass("5.1-text", `pre_event message valid: "${r.json.telegramMessage.slice(0, 60)}"`)
+        : fail("5.1-text", `pre_event message invalid: ${v.reason} | "${r.json.telegramMessage.slice(0, 80)}"`);
     }
   }
 
-  // 6.8 — Duplicate state+phase → skipped
+  // 6.8 — Duplicate state+phase → skipped (dry-run still triggers dedup)
   {
     const body = makeRedPayload("pre_event", 20);
     const r = await postEvent(body);
     if (r.status === 200 && r.json && r.json.skipped === "duplicate_state_phase") {
       pass("6.8", `duplicate_state_phase skipped ✓`);
-    } else if (r.status === 500) {
-      pass("6.8", `HTTP 500 (missing tokens) — duplicate check not reachable but expected in test env`);
+    } else if (r.status === 200 && r.json && r.json.dry_run === true) {
+      pass("6.8", `dry_run returned (state reset between calls, acceptable)`);
     } else {
-      // First call may set state, second should skip — acceptable either way
-      pass("6.8", `HTTP ${r.status} (state changed or skipped)`);
+      pass("6.8", `HTTP ${r.status} (acceptable)`);
     }
   }
 
-  // 5.1 / 6.3 — RED during_event
+  // 5.1b — RED during_event (dry-run)
   {
     const body = makeRedPayload("during_event", 0);
     const r = await postEvent(body);
-    const acceptable = r.status === 200 || r.status === 500;
-    acceptable ? pass("5.1b", `POST during_event → HTTP ${r.status}`) : fail("5.1b", `unexpected HTTP ${r.status}`);
+    r.status === 200 && r.json.dry_run === true
+      ? pass("5.1b", `POST during_event → HTTP 200, dry_run ✓`)
+      : fail("5.1b", `unexpected status=${r.status} dry_run=${r.json && r.json.dry_run}`);
+
+    if (r.json && r.json.telegramMessage) {
+      const vp = r.json.volatility_payload || {};
+      const v = validateTelegramText(r.json.telegramMessage, vp);
+      v.ok
+        ? pass("5.1b-text", `during_event message valid: "${r.json.telegramMessage.slice(0, 60)}"`)
+        : fail("5.1b-text", `during_event message invalid: ${v.reason}`);
+    }
   }
 
-  // 5.1 / 6.4 — RED post_event
-  {
-    const body = makeRedPayload("post_event", 0);
-    const r = await postEvent(body);
-    const acceptable = r.status === 200 || r.status === 500;
-    acceptable ? pass("5.1c", `POST post_event → HTTP ${r.status}`) : fail("5.1c", `unexpected HTTP ${r.status}`);
-  }
-
-  // 5.2 / 6.1 — GREEN
+  // 5.2 — GREEN (dry-run)
   {
     const body = makeGreenPayload();
     const r = await postEvent(body);
-    const acceptable = r.status === 200 || r.status === 500;
-    acceptable ? pass("5.2", `POST GREEN → HTTP ${r.status}`) : fail("5.2", `unexpected HTTP ${r.status}`);
+    r.status === 200 && r.json.dry_run === true
+      ? pass("5.2", `POST GREEN → HTTP 200, dry_run ✓`)
+      : fail("5.2", `unexpected status=${r.status} dry_run=${r.json && r.json.dry_run}`);
   }
 
   // 5.3 — Payload field types
@@ -448,7 +445,7 @@ async function testSection56() {
     else pass("5.3", "payload field types correct");
   }
 
-  // 5.2 — GREEN context = null
+  // 5.2b — GREEN context = null
   {
     const body = makeGreenPayload();
     body.context === null ? pass("5.2b", "GREEN context=null ✓") : fail("5.2b", `context=${JSON.stringify(body.context)}`);
@@ -529,13 +526,6 @@ function testSection6Grammar() {
     fw ? fail("6.3b", `forbidden word in during first line: ${fw}`) : pass("6.3b", `during first line clean: "${firstLine}"`);
   }
 
-  // 6.4 RED post_event
-  {
-    const p = basePayload({ phase: "post_event", minutes_to_event: 0 });
-    const text = renderTelegramTextTemplate(p, {});
-    checkText("6.4", text, p, "post_event high");
-  }
-
   // 6.5 anchor_high — event_name must appear in text
   {
     const p = basePayload({
@@ -564,7 +554,7 @@ function testSection6Grammar() {
   }
 
   // 6.6 No forbidden words in all phases
-  const phases = ["pre_event", "during_event", "post_event"];
+  const phases = ["pre_event", "during_event"];
   for (const ph of phases) {
     const p = basePayload({ phase: ph, minutes_to_event: ph === "pre_event" ? 10 : 0 });
     const text = renderTelegramTextTemplate(p, {});
@@ -701,22 +691,13 @@ function testSection3Boundary() {
     r.phase === "pre_event" ? pass("3.B2", "1ms before clusterStart → pre_event") : fail("3.B2", `got ${r.phase}`);
   }
 
-  // Exactly at clusterEnd + DURING_WINDOW_MS (during→post boundary)
+  // Exactly at clusterEnd + DURING_WINDOW_MS (during→GREEN boundary, post_event removed)
   {
     const eventMs = nowMs - DURING_WINDOW_MS; // event ended exactly DURING_WINDOW ago
     const items = [{ title: "Boundary Event", date: new Date(eventMs).toISOString(), impact: "High", country: "US" }];
     const r = computeVolatility(nowMs, items);
-    // clusterEnd = eventMs; post: clusterEnd+5min <= ts < clusterEnd+15min → nowMs = eventMs+5min → post_event
-    r.phase === "post_event" ? pass("3.B3", "exactly at during→post boundary → post_event") : fail("3.B3", `got ${r.phase}`);
-  }
-
-  // Exactly at clusterEnd + POST_WINDOW_MS → none (GREEN)
-  {
-    const eventMs = nowMs - POST_WINDOW_MS; // 15 min ago
-    const items = [{ title: "Boundary Event", date: new Date(eventMs).toISOString(), impact: "High", country: "US" }];
-    const r = computeVolatility(nowMs, items);
-    // clusterEnd = eventMs; post ends at clusterEnd+15 = nowMs → NOT < nowMs → none
-    r.state === "GREEN" ? pass("3.B4", "post_event expired → GREEN") : fail("3.B4", `got ${r.state}/${r.phase}`);
+    // during: clusterStart <= ts < clusterEnd+5min → nowMs = eventMs+5min → NOT < eventMs+5 → none → GREEN
+    r.state === "GREEN" ? pass("3.B3", "during+5min expired → GREEN (no post_event)") : fail("3.B3", `got ${r.state}/${r.phase}`);
   }
 }
 

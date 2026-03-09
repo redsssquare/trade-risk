@@ -2,7 +2,7 @@
 /**
  * Шаг 6 плана Weekly End: тестовый POST с фиксированным JSON в /weekly-digest.
  * Проверяет: текст по формату спеки, уровень корректен, запрещённых слов нет, строк ≤ 9.
- * Отправка только в TELEGRAM_TEST_CHANNEL_ID (bridge).
+ * Отправка в TELEGRAM_CHAT_ID (основной канал, bridge).
  * Usage: BRIDGE_URL=http://localhost:3000 node scripts/send-weekly-digest-test.js
  * Только превью (без отправки в TG): DRY_RUN=1 node scripts/send-weekly-digest-test.js
  * Превью с разными неделями (все варианты фраз в логах): DRY_RUN=1 SHOW_WEEKS=1 node scripts/send-weekly-digest-test.js
@@ -43,6 +43,7 @@ function getMoscowWeekRange() {
 const FIXED_PAYLOADS = [
   {
     name: "Спокойная неделя, 1 день активности",
+    _caseType: "single",
     payload: {
       week_range: "24–28.02",
       high_events: 1,
@@ -56,6 +57,7 @@ const FIXED_PAYLOADS = [
   },
   {
     name: "Умеренная, 2 дня, с окном в часах",
+    _caseType: "multiple",
     payload: {
       week_range: "24–28.02",
       high_events: 4,
@@ -69,6 +71,7 @@ const FIXED_PAYLOADS = [
   },
   {
     name: "Насыщенная, 3+ дней, busy_day_bonus",
+    _caseType: "anchor",
     payload: {
       week_range: "24–28.02",
       high_events: 5,
@@ -82,6 +85,7 @@ const FIXED_PAYLOADS = [
   },
   {
     name: "Понижение из‑за quiet_days >= 3 (насыщенная → умеренная)",
+    _caseType: "anchor",
     payload: {
       week_range: "24–28.02",
       high_events: 4,
@@ -90,6 +94,20 @@ const FIXED_PAYLOADS = [
       total_window_minutes: 45,
       active_days: ["Tue", "Thu"],
       quiet_days_count: 3,
+      busy_day_bonus: 0,
+    },
+  },
+  {
+    name: "Кластер с anchor (clusters=2, anchor=2)",
+    _caseType: "cluster_anchor",
+    payload: {
+      week_range: "24–28.02",
+      high_events: 4,
+      anchor_events: 2,
+      clusters: 2,
+      total_window_minutes: 100,
+      active_days: ["Tue", "Thu"],
+      quiet_days_count: 2,
       busy_day_bonus: 0,
     },
   },
@@ -125,15 +143,16 @@ function postWeeklyDigest(body) {
   });
 }
 
-function runChecks(name, payload, text) {
-  const lines = text.split("\n").map((s) => s.trim()).filter(Boolean);
-  const validation = validateWeeklyEnd(payload, text);
+function runChecks(name, payload, text, levelKey) {
+  const str = typeof text === "string" ? text : (text && text.text) || "";
+  const lines = str.split("\n").map((s) => s.trim()).filter(Boolean);
+  const validation = validateWeeklyEnd(payload, str, levelKey);
   const ok = validation.ok && lines.length <= 9;
   return {
     ok,
     validation,
     lineCount: lines.length,
-    text,
+    text: str,
   };
 }
 
@@ -145,12 +164,12 @@ async function main() {
 
   let hasFailure = false;
 
-  for (const { name, payload } of FIXED_PAYLOADS) {
+  for (const { name, _caseType, payload } of FIXED_PAYLOADS) {
     const payloadWithWeek = { ...payload, week_range: weekRange };
-    const text = formatWeeklyEnd(payloadWithWeek);
-    const { ok, validation, lineCount, text: formatted } = runChecks(name, payloadWithWeek, text);
+    const { text, levelKey } = formatWeeklyEnd(payloadWithWeek);
+    const { ok, validation, lineCount, text: formatted } = runChecks(name, payloadWithWeek, text, levelKey);
 
-    console.log("---", name);
+    console.log("---", _caseType ? `[${_caseType}]` : "", name);
     console.log("Строк:", lineCount, "(макс. 9)", lineCount <= 9 ? "✓" : "✗");
     console.log("Валидация:", validation.ok ? "ok" : validation.reason);
     if (!validation.ok) console.log("  reason:", validation.reason);
@@ -188,7 +207,7 @@ async function main() {
       console.log("#### Неделя", weekRange, "####\n");
       for (const { name, payload } of FIXED_PAYLOADS) {
         const p = { ...payload, week_range: weekRange };
-        const text = formatWeeklyEnd(p);
+        const { text } = formatWeeklyEnd(p);
         console.log("---", name, "---");
         console.log(text);
         console.log("");

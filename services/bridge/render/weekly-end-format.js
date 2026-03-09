@@ -36,6 +36,7 @@ const {
   MAX_LINES,
   WEEKLY_FORBIDDEN_WORDS,
 } = require("./weekly-end-phrases");
+const { pluralRu } = require("../../../utils/pluralRu");
 
 /** Баллы: anchor*3 + high*1 + clusters*2 + busy_day_bonus */
 function getScore(payload) {
@@ -62,6 +63,12 @@ function applyQuietDowngrade(level, quietDaysCount) {
   return LEVEL_CALM;
 }
 
+/** Уровень недели с учётом quiet_days_count (для валидации и внешних вызовов) */
+function getWeeklyEndLevel(payload) {
+  const score = getScore(payload);
+  return applyQuietDowngrade(getLevelFromScore(score), Number(payload.quiet_days_count) || 0);
+}
+
 /** total_window_minutes → "Xm" или "Xч Ym" (пример: 175 → "2ч 55м") */
 function formatMinutes(totalMinutes) {
   const m = Math.max(0, Math.floor(Number(totalMinutes) || 0));
@@ -69,16 +76,6 @@ function formatMinutes(totalMinutes) {
   const h = Math.floor(m / 60);
   const rem = m % 60;
   return rem === 0 ? `${h}ч` : `${h}ч ${rem}м`;
-}
-
-/** Склонение для русского: one (1), few (2-4), many (0,5-20,21-24...) */
-function pluralRu(n, one, few, many) {
-  const x = Math.abs(Number(n)) % 100;
-  const d = x % 10;
-  if (x >= 11 && x <= 14) return many;
-  if (d === 1) return one;
-  if (d >= 2 && d <= 4) return few;
-  return many;
 }
 
 /** Нормализует диапазон дат в заголовок: "23–27.02" → "23.02–27.02" */
@@ -135,25 +132,15 @@ function hasOnlyAllowedEmoji(text) {
  * Валидация текста «Итоги недели» перед отправкой (шаг 4 спеки).
  * @param {object} payload — тот же объект, что передаётся в formatWeeklyEnd
  * @param {string} text — сформированный текст
+ * @param {string} levelKey — уровень недели (LEVEL_CALM, LEVEL_MODERATE, LEVEL_SATURATED)
  * @returns {{ ok: true } | { ok: false, reason: string }}
  */
-function validateWeeklyEnd(payload, text) {
+function validateWeeklyEnd(payload, text, levelKey) {
   const t = typeof text === "string" ? text.trim() : "";
   if (!t) return { ok: false, reason: "empty_text" };
 
-  const score = getScore(payload);
-  let levelKey = getLevelFromScore(score);
-  levelKey = applyQuietDowngrade(levelKey, Number(payload.quiet_days_count) || 0);
-  const levelSub =
-    levelKey === LEVEL_SATURATED
-      ? LEVEL_SATURATED_SUB
-      : levelKey === LEVEL_MODERATE
-        ? LEVEL_MODERATE_SUB
-        : LEVEL_CALM_SUB;
-  const tLower = t.toLowerCase();
-  if (!tLower.includes(levelSub)) {
-    return { ok: false, reason: "level_mismatch" };
-  }
+  const expectedLevel = applyQuietDowngrade(getLevelFromScore(getScore(payload)), Number(payload.quiet_days_count) || 0);
+  if (levelKey !== expectedLevel) return { ok: false, reason: "level_mismatch" };
 
   const lines = t.split("\n").map((s) => s.trim()).filter(Boolean);
   if (lines.length > MAX_LINES) {
@@ -189,7 +176,7 @@ function validateWeeklyEnd(payload, text) {
  *   quiet_days_count?: number,
  *   busy_day_bonus?: 0 | 1
  * }} payload
- * @returns {string}
+ * @returns {{ text: string, levelKey: string }}
  */
 /** Строка про высокозначимые с правильным склонением (только для вывода в TG, без внутренних терминов). */
 function getHighEventsLine(n, variantIndex) {
@@ -235,7 +222,7 @@ function formatWeeklyEnd(payload) {
         : LEVEL_CALM_PHRASES;
   blocks.push(levelPhrases[v] != null ? levelPhrases[v] : levelPhrases[0]);
 
-  // Блок 3: метрики (high, anchor, clusters) — без пустых строк между строками
+  // Блок 3: метрики (high, anchor, clusters) — отдельным списком
   const metricLines = [];
   if (highEvents > 0) {
     metricLines.push(getHighEventsLine(highEvents, v));
@@ -257,9 +244,23 @@ function formatWeeklyEnd(payload) {
   } else if (clusters === 1) {
     metricLines.push(CLUSTERS_ONE_PHRASES[v] != null ? CLUSTERS_ONE_PHRASES[v] : CLUSTERS_ONE_PHRASES[0]);
   } else {
-    metricLines.push(CLUSTERS_TWO_PHRASES[v] != null ? CLUSTERS_TWO_PHRASES[v] : CLUSTERS_TWO_PHRASES[0]);
+    const idx = v % 4;
+    const clusterLine =
+      idx === 0
+        ? `${clusters} ${pluralRu(clusters, "плотный интервал", "плотных интервала", "плотных интервалов")} за неделю.`
+        : idx === 1
+          ? `${clusters} плотных новостных ${pluralRu(clusters, "интервал", "интервала", "интервалов")} за неделю.`
+          : idx === 2
+            ? `${clusters} ${pluralRu(clusters, "плотный интервал", "плотных интервала", "плотных интервалов")} в неделе.`
+            : `${clusters} ${pluralRu(clusters, "момент", "момента", "моментов")}, когда события шли подряд.`;
+    metricLines.push(clusterLine);
   }
-  blocks.push(metricLines.join("\n"));
+  const metricList = metricLines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `• ${line}`)
+    .join("\n");
+  blocks.push(metricList);
 
   // Блок 4: распределение + окно
   const distributionLines = [];
@@ -267,12 +268,11 @@ function formatWeeklyEnd(payload) {
     distributionLines.push(DISTRIBUTION_CALM_PHRASES[v] != null ? DISTRIBUTION_CALM_PHRASES[v] : DISTRIBUTION_CALM_PHRASES[0]);
   } else if (activeDaysRu.length === 1) {
     const onePhrase = DISTRIBUTION_ONE_PHRASES[v] != null ? DISTRIBUTION_ONE_PHRASES[v] : DISTRIBUTION_ONE_PHRASES[0];
-    const dayName = onePhrase.includes("пришёлся на") ? getActiveDaysRuAcc(payload.active_days)[0] : activeDaysRu[0];
+    const dayName = getActiveDaysRuAcc(payload.active_days)[0] || activeDaysRu[0];
     distributionLines.push(onePhrase.replace("{day}", dayName));
   } else if (activeDaysRu.length === 2) {
     const twoPhrase = DISTRIBUTION_TWO_PHRASES[v] != null ? DISTRIBUTION_TWO_PHRASES[v] : DISTRIBUTION_TWO_PHRASES[0];
-    const useAcc = twoPhrase.includes("пришёлся на");
-    const days = useAcc ? getActiveDaysRuAcc(payload.active_days) : activeDaysRu;
+    const days = getActiveDaysRuAcc(payload.active_days);
     distributionLines.push(twoPhrase.replace("{day1}", days[0]).replace("{day2}", days[1]));
   } else {
     distributionLines.push(DISTRIBUTION_MANY_PHRASES[v] != null ? DISTRIBUTION_MANY_PHRASES[v] : DISTRIBUTION_MANY_PHRASES[0]);
@@ -297,12 +297,13 @@ function formatWeeklyEnd(payload) {
     console.warn("[weekly-end] Обнаружено запрещённое слово:", forbidden);
   }
 
-  return text;
+  return { text, levelKey };
 }
 
 module.exports = {
   formatWeeklyEnd,
   validateWeeklyEnd,
+  getWeeklyEndLevel,
   getScore,
   getLevelFromScore,
   applyQuietDowngrade,

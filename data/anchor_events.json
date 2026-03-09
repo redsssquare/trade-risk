@@ -33,7 +33,8 @@
         "fomc press conference",
         "fomc economic projections",
         "fomc meeting minutes"
-      ]
+      ],
+      "exclude": ["minutes"]
     },
     {
       "key": "us_cpi_main_release",

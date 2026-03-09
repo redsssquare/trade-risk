@@ -32,6 +32,7 @@ function getTelegramChatId() {
 }
 const B2_TEST_MESSAGE = process.env.B2_TEST_MESSAGE || "[B2 TEST] POST -> bridge -> Telegram";
 const AI_ENABLED = String(process.env.AI_ENABLED || "false").toLowerCase() === "true";
+const WEEKLY_LLM_POLISH_ENABLED = String(process.env.WEEKLY_LLM_POLISH_ENABLED || "false").toLowerCase() === "true";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const AI_MODEL = process.env.AI_MODEL || "gpt-4o-mini";
 const AI_TIMEOUT_MS = Number.parseInt(process.env.AI_TIMEOUT_MS || "8000", 10);
@@ -299,7 +300,7 @@ app.post("/daily-digest", async (req, res) => {
 
     const withAnchor = classifyAnchorWithContext(todayEvents);
 
-    const text = formatDailyDigest(withAnchor, { moscowDateStr });
+    const finalText = formatDailyDigest(withAnchor, { moscowDateStr });
 
     const chatId = getTelegramChatId();
     if (!chatId) {
@@ -316,7 +317,7 @@ app.post("/daily-digest", async (req, res) => {
       try {
         const imageData = buildDigestImageData(withAnchor, { moscowDateStr });
         const imageBuffer = await renderDigestImage(imageData);
-        await sendTelegramPhoto(chatId, imageBuffer, text);
+        await sendTelegramPhoto(chatId, imageBuffer, finalText);
         photoSent = true;
       } catch (err) {
         photoError = err && err.message ? err.message : String(err);
@@ -325,12 +326,12 @@ app.post("/daily-digest", async (req, res) => {
         } else {
           console.error("[bridge:daily-digest:image-error]", photoError);
         }
-        await sendTelegramMessage(chatId, text);
+        await sendTelegramMessage(chatId, finalText);
       }
     } else {
       photoError = "TELEGRAM_BOT_TOKEN not set";
       console.warn("[bridge:daily-digest] photo skipped:", photoError);
-      await sendTelegramMessage(chatId, text);
+      await sendTelegramMessage(chatId, finalText);
     }
 
     return res.json({
@@ -339,6 +340,7 @@ app.post("/daily-digest", async (req, res) => {
         eventsCount: withAnchor.length,
         sent: true,
         photo_sent: photoSent,
+        llm_polish: false,
         ...(photoError && { photo_error: photoError }),
         calendar_source: calendarSource
       }
@@ -384,8 +386,8 @@ app.post("/weekly-digest", async (req, res) => {
       });
     }
 
-    const text = formatWeeklyEnd(payload);
-    const validation = validateWeeklyEnd(payload, text);
+    const { text, levelKey } = formatWeeklyEnd(payload);
+    const validation = validateWeeklyEnd(payload, text, levelKey);
     if (!validation.ok) {
       console.warn("[bridge:weekly-digest:validation]", validation.reason, { payload: { week_range: payload.week_range } });
       return res.status(400).json({
@@ -395,11 +397,17 @@ app.post("/weekly-digest", async (req, res) => {
       });
     }
 
-    await sendTelegramMessage(chatId, text);
+    // Weekly messages are template-first by default to avoid unstable rephrasing.
+    // Set WEEKLY_LLM_POLISH_ENABLED=true only if you explicitly want LLM polishing.
+    const finalText = WEEKLY_LLM_POLISH_ENABLED
+      ? await polishTextWithLlm(text, { type: "weekly_end", week_range: payload.week_range, high_events: payload.high_events, anchor_events: payload.anchor_events })
+      : text;
+
+    await sendTelegramMessage(chatId, finalText);
 
     return res.json({
       status: "ok",
-      meta: { sent: true }
+      meta: { sent: true, llm_polish: WEEKLY_LLM_POLISH_ENABLED && finalText !== text }
     });
   } catch (error) {
     console.error("[bridge:weekly-digest:error]", error && error.message ? error.message : error);
@@ -440,12 +448,16 @@ app.post("/weekly-ahead", async (req, res) => {
       });
     }
 
+    const finalText = WEEKLY_LLM_POLISH_ENABLED
+      ? await polishTextWithLlm(text, { type: "weekly_ahead", week_range: payload.week_range, high_events: payload.high_events, anchor_events: payload.anchor_events })
+      : text;
+
     console.log("[bridge:weekly-ahead:send] target=" + (targetChatId ? targetChatId.slice(-6) + " (…)" : "MISSING"));
-    await sendTelegramMessage(targetChatId, text);
+    await sendTelegramMessage(targetChatId, finalText);
 
     return res.json({
       status: "ok",
-      meta: { sent: true }
+      meta: { sent: true, llm_polish: WEEKLY_LLM_POLISH_ENABLED && finalText !== text }
     });
   } catch (error) {
     const details = error && error.details ? error.details : null;
@@ -689,6 +701,26 @@ const DURING_EVENT_SECOND_LINE_PROMPT = [
   "}"
 ].join("\n");
 
+const LLM_POLISH_SYSTEM_PROMPT = [
+  "You polish Russian text for a Telegram volatility message.",
+  "Return valid JSON only: { \"polished_text\": \"string\" }.",
+  "",
+  "Tasks:",
+  "- Fix grammar (e.g. \"4 ключевых событий\" → \"4 ключевых события\").",
+  "- Remove template and mechanical phrases.",
+  "- Make text lively and natural, as a human would write.",
+  "",
+  "Do NOT change: numbers, facts, emojis, structure (header, blocks).",
+  "",
+  "Forbidden styles and phrases (replace or remove):",
+  "- Jargon: \"рынок переваривает цифры\", \"важные цифры\", \"рынок ждёт данных\".",
+  "- Newspaper clichés: \"ожидаются важные публикации\", \"высокая концентрация событий\".",
+  "- Bureaucratic: \"Предупредим перед важным окном\", \"активность сохранится\".",
+  "- Pseudo-business tone: \"ключевые публикации в центральные дни\".",
+  "",
+  "Target tone: calm, clear, no pathos, as a human trader would speak."
+].join("\n");
+
 const validateTelegramText = (telegramText, volatilityPayload) => {
   const text = typeof telegramText === "string" ? telegramText.trim() : "";
   if (!text) {
@@ -909,6 +941,31 @@ const generateMessageWithLlm = async (volatilityPayload) => {
     repair_triggered: true,
     final_validation_result: validationResult
   });
+};
+
+const polishTextWithLlm = async (rawText, contextPayload) => {
+  if (!AI_ENABLED || !openaiClient || !OPENAI_API_KEY) {
+    return rawText;
+  }
+  try {
+    const userContent = typeof rawText === "string" ? rawText.trim() : "";
+    if (!userContent) return rawText;
+    const contextStr = contextPayload != null ? `\n\nContext:\n${JSON.stringify(contextPayload)}` : "";
+    const systemMessage = { role: "system", content: LLM_POLISH_SYSTEM_PROMPT };
+    const userMessage = { role: "user", content: userContent + contextStr };
+    const result = await createOneLlmCompletion([systemMessage, userMessage]);
+    if (result.error) return rawText;
+    const parsed = JSON.parse(result.responseText);
+    const polished = parsed && typeof parsed.polished_text === "string" ? parsed.polished_text.trim() : "";
+    if (!polished) return rawText;
+    if (polished.length > rawText.length * 1.3) return rawText;
+    const rawFirst = userContent.split("\n")[0] || "";
+    const polishedFirst = polished.split("\n")[0] || "";
+    if (rawFirst && polishedFirst !== rawFirst) return rawText;
+    return polished;
+  } catch (_e) {
+    return rawText;
+  }
 };
 
 const sendTelegramMessage = async (targetChatId, message) => {

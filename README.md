@@ -30,6 +30,8 @@
 
 **TEST_CHANNEL:** переключатель режима отправки в Telegram. `TEST_CHANNEL=true` → отправка в **TELEGRAM_TEST_CHANNEL_ID** (тестовый канал); `TEST_CHANNEL=false` → в **TELEGRAM_CHAT_ID** (основной канал). Если `TEST_CHANNEL` не задан — используется fallback на **TELEGRAM_MODE** (`test` / `production`). Применяется к daily-digest, weekly-digest, weekly-ahead и `/hooks/event`.
 
+**LLM Text Finalizer:** перед отправкой в Telegram текст дайджестов (daily, weekly, weekly-ahead) опционально полируется LLM (грамматика, стиль). Включение: `AI_ENABLED=true` и наличие API-ключа. При `AI_ENABLED=false` или отсутствии ключа LLM не вызывается, используется исходный текст. При любой ошибке LLM — fallback на оригинал. В meta ответа возвращается `llm_polish: true/false` — признак того, был ли применён LLM-полиш.
+
 Ключевые файлы:
 - `n8n-volatility-window-workflow.json` (единственный workflow-файл)
 - `services/bridge/server.js`, `services/bridge/render/` (шаблоны high/anchor_high)
@@ -63,9 +65,10 @@
   - **First Friday signal:** первый пятница месяца + Employment Change/Nonfarm (без ADP) + USD — дополнительный сигнал для пометки как NFP в пограничных случаях.
   - **Digest:** для NFP-кластера в дневном дайджесте используется специальная строка «Рынок труда США (Non-Farm Payrolls)» вместо общей «Серия из N публикаций».
 - **Render-шаблоны (Этап 5):** отдельный слой `services/bridge/render/` — шаблоны для `high` и `anchor_high`. Текст не пересчитывает фазы/минуты, использует только поля payload. Поддержка серии публикаций (`cluster_size>1`) и anchor внутри серии в pre_event.
+- **pluralRu (utils/pluralRu.js):** хелпер склонения числительных по правилам русского языка. Используется во всех render-шаблонах для корректных форм: 1 событие / 2 события / 5 событий, 1 минуту / 2 минуты / 5 минут, публикации/публикаций и т.п. Вызов: `pluralRu(n, one, few, many)` — возвращает одну из трёх форм в зависимости от числа.
 - Фазы:
   - `pre_event`: 7 минут до первого события кластера
-  - `during_event`: от начала кластера до конца последнего события + 4 мин
+  - `during_event`: от начала кластера до конца последнего события + 4 мин; первая строка — 🔴 + название публикации и валюта (single/серия/anchor+серия)
 - Отправка в Telegram: только при смене состояния/фазы (плюс bootstrap при первом прогоне, если включен в workflow staticData).
 - Тестовый фид:
   - `CALENDAR_TEST_MODE=true` -> bridge читает `data/simulated_day.json`.

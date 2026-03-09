@@ -1,3 +1,5 @@
+const { pluralRu } = require("../../../../utils/pluralRu");
+
 const getSafeMinutes = (payload) => {
   const raw = payload && Number.isFinite(payload.minutes_to_event)
     ? payload.minutes_to_event
@@ -17,7 +19,7 @@ const pickAnchorName = (payload) => {
 
 const renderHighDuringEvent = () => [
   "Опубликованы экономические данные.",
-  "Рынок начинает реагировать."
+  "Идёт реакция рынка."
 ].join("\n");
 
 const renderHighPreEvent = (payload) => {
@@ -29,19 +31,15 @@ const renderHighPreEvent = (payload) => {
   const hasAnchorInSeries = payload && payload.cluster_has_anchor === true;
   const anchorName = pickAnchorName(payload);
 
+  const minWord = pluralRu(minutes, "минуту", "минуты", "минут");
   if (hasSeries && hasAnchorInSeries && anchorName) {
-    return `⚡ Через ${minutes} минут серия публикаций, включая ${anchorName}.`;
+    return `⚡ Через ${minutes} ${minWord} серия публикаций, включая ${anchorName}.`;
   }
   if (hasSeries) {
-    return `⏳ Через ${minutes} минут выходит несколько данных подряд.`;
+    return `⏳ Через ${minutes} ${minWord} выходит несколько данных подряд.`;
   }
-  return `⏳ Через ${minutes} минут выходят важные данные.`;
+  return `⏳ Через ${minutes} ${minWord} выходят важные данные.`;
 };
-
-const renderHighPostEvent = () => [
-  "Данные вышли.",
-  "Рынок переваривает публикацию."
-].join(" ");
 
 const renderHighTemplate = (payload) => {
   const phase = String(payload && payload.phase ? payload.phase : "none").trim();
@@ -52,10 +50,7 @@ const renderHighTemplate = (payload) => {
   if (phase === "pre_event") {
     return renderHighPreEvent(payload);
   }
-  if (phase === "post_event") {
-    return renderHighPostEvent();
-  }
-  return "Рынок в активной фазе.";
+  return "Окно волатильности активно.";
 };
 
 module.exports = {

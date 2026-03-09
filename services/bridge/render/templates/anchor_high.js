@@ -1,3 +1,5 @@
+const { pluralRu } = require("../../../../utils/pluralRu");
+
 const getSafeMinutes = (payload) => {
   const raw = payload && Number.isFinite(payload.minutes_to_event)
     ? payload.minutes_to_event
@@ -20,14 +22,12 @@ const renderAnchorHighPreEvent = (payload) => {
     ? payload.cluster_size
     : 0;
 
+  const minWord = pluralRu(minutes, "минуту", "минуты", "минут");
   if (clusterSize > 1) {
-    return `⚡ Через ${minutes} минут серия публикаций, включая ${eventName}.`;
+    return `⚡ Через ${minutes} ${minWord} серия публикаций, включая ${eventName}.`;
   }
-  return `⚡ Через ${minutes} минут выходит ${eventName}.`;
+  return `⚡ Через ${minutes} ${minWord} выходит ${eventName}.`;
 };
-
-const renderAnchorHighPostEvent = (payload) =>
-  `${getEventName(payload)} вышел. Рынок переваривает данные.`;
 
 const renderAnchorHighTemplate = (payload) => {
   const phase = String(payload && payload.phase ? payload.phase : "none").trim();
@@ -35,16 +35,13 @@ const renderAnchorHighTemplate = (payload) => {
   if (phase === "during_event") {
     return [
       renderAnchorHighDuringEvent(payload),
-      "Рынок начинает реагировать."
+      "Идёт реакция рынка."
     ].join("\n");
   }
   if (phase === "pre_event") {
     return renderAnchorHighPreEvent(payload);
   }
-  if (phase === "post_event") {
-    return renderAnchorHighPostEvent(payload);
-  }
-  return `⚡ Рынок реагирует на ${getEventName(payload)}.`;
+  return `⚡ Окно волатильности активно.`;
 };
 
 module.exports = {

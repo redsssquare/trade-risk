@@ -13,6 +13,8 @@
     "activate:volatility": "node scripts/activate-volatility-workflow.js",
     "push:volatility": "node scripts/push-volatility-workflow.js",
     "deploy:volatility:smoke": "node scripts/deploy-smoke-volatility-workflow.js",
-    "send:weekly-ahead-test": "node scripts/send-weekly-ahead-test-cases.js"
+    "send:weekly-ahead-test": "node scripts/send-weekly-ahead-test-cases.js",
+    "send:volatility-test-events": "node scripts/send-volatility-test-events.js",
+    "test:during-event-tg": "node scripts/test-during-event-telegram.js"
   }
 }

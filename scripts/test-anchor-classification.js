@@ -29,9 +29,9 @@ function run() {
         result.anchor_label === "NFP"
     },
     {
-      name: "high non-anchor: Retail Sales => high",
+      name: "high non-anchor: Unemployment Claims => high",
       now: "2026-03-03T11:58:00Z",
-      events: [toEvent("US Retail Sales", "2026-03-03T12:00:00Z")],
+      events: [toEvent("Unemployment Claims", "2026-03-03T12:00:00Z")],
       check: (result) =>
         result.impact_type === "high" &&
         result.anchor_label === null
@@ -48,15 +48,16 @@ function run() {
       name: "series cluster: anchor inside cluster exposed in LLM context fields",
       now: "2026-03-03T09:04:00Z",
       events: [
-        toEvent("US ISM Services", "2026-03-03T09:05:00Z"),
+        toEvent("JOLTS Job Openings", "2026-03-03T09:05:00Z"),
         toEvent("Non-Farm Payrolls", "2026-03-03T09:07:00Z"),
         toEvent("US Jobless Claims", "2026-03-03T09:09:00Z")
       ],
       check: (result) =>
-        result.impact_type === "high" &&
         result.cluster_has_anchor === true &&
+        result.contextual_anchor === true &&
         Array.isArray(result.cluster_anchor_names) &&
-        result.cluster_anchor_names.includes("Non-Farm Payrolls")
+        result.cluster_anchor_names.includes("Non-Farm Payrolls") &&
+        (result.impact_type === "high" || result.impact_type === "anchor_high")
     },
     {
       name: "ADP Nonfarm Employment Change => high (excluded from NFP)",
@@ -88,6 +89,30 @@ function run() {
         result.cluster_anchor_names.length >= 2 &&
         result.cluster_anchor_names.includes("Unemployment Rate") &&
         result.cluster_anchor_names.includes("Average Hourly Earnings")
+    },
+    {
+      name: "ECB Rate Decision EUR => anchor_high",
+      now: "2026-03-03T12:28:00Z",
+      events: [toEvent("ECB Rate Decision", "2026-03-03T12:30:00Z", "High", "EUR")],
+      check: (result) =>
+        result.impact_type === "anchor_high" &&
+        result.anchor_label === "ECB Rate Decision"
+    },
+    {
+      name: "CPI m/m EUR => high (country constraint, anchor only for USD)",
+      now: "2026-03-03T12:28:00Z",
+      events: [toEvent("CPI m/m", "2026-03-03T12:30:00Z", "High", "EUR")],
+      check: (result) =>
+        result.impact_type === "high" &&
+        result.anchor_label === null
+    },
+    {
+      name: "Retail Sales m/m USD => anchor_high",
+      now: "2026-03-03T12:28:00Z",
+      events: [toEvent("Retail Sales m/m", "2026-03-03T12:30:00Z", "High", "USD")],
+      check: (result) =>
+        result.impact_type === "anchor_high" &&
+        (result.anchor_label === "US Retail Sales" || result.anchor_label === "Retail Sales")
     }
   ];
 

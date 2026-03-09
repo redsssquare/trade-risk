@@ -45,6 +45,7 @@ function getMoscowWeekRange() {
 const TEST_CASES = [
   {
     name: "1. Спокойная неделя (high 1, anchor 0, clusters 0)",
+    _caseType: "single",
     payload: {
       week_range: "03–07.03",
       high_events: 1,
@@ -58,6 +59,7 @@ const TEST_CASES = [
   },
   {
     name: "2. Умеренная неделя (high 4, anchor 1, clusters 2)",
+    _caseType: "multiple",
     payload: {
       week_range: "03–07.03",
       high_events: 4,
@@ -71,6 +73,7 @@ const TEST_CASES = [
   },
   {
     name: "3. Насыщенная неделя (high 5, anchor 2, clusters 2, busy_day_bonus)",
+    _caseType: "multiple",
     payload: {
       week_range: "03–07.03",
       high_events: 5,
@@ -84,6 +87,7 @@ const TEST_CASES = [
   },
   {
     name: "4. Понижение из‑за quiet_days >= 3 (saturated → moderate)",
+    _caseType: "anchor",
     payload: {
       week_range: "03–07.03",
       high_events: 4,
@@ -97,6 +101,7 @@ const TEST_CASES = [
   },
   {
     name: "5. Ключевые 3+, плотный интервал 1 (склонение и фразы)",
+    _caseType: "anchor",
     payload: {
       week_range: "03–07.03",
       high_events: 2,
@@ -110,6 +115,7 @@ const TEST_CASES = [
   },
   {
     name: "6. С high_events_per_day (распределение по дням)",
+    _caseType: "multiple",
     payload: {
       week_range: "03–07.03",
       high_events: 5,
@@ -124,6 +130,7 @@ const TEST_CASES = [
   },
   {
     name: "7. Граница: все нули (1 активный день)",
+    _caseType: "single",
     payload: {
       week_range: "03–07.03",
       high_events: 0,
@@ -137,6 +144,7 @@ const TEST_CASES = [
   },
   {
     name: "8. Граница: один элемент (1 anchor, 1 high)",
+    _caseType: "anchor",
     payload: {
       week_range: "03–07.03",
       high_events: 1,
@@ -145,6 +153,20 @@ const TEST_CASES = [
       total_window_minutes: 30,
       active_days: ["Tue"],
       quiet_days_count: 4,
+      busy_day_bonus: 0,
+    },
+  },
+  {
+    name: "9. Кластер с anchor (clusters > 0 && anchor > 0)",
+    _caseType: "cluster_anchor",
+    payload: {
+      week_range: "03–07.03",
+      high_events: 3,
+      anchor_events: 2,
+      clusters: 2,
+      total_window_minutes: 90,
+      active_days: ["Mon", "Thu"],
+      quiet_days_count: 2,
       busy_day_bonus: 0,
     },
   },
@@ -194,13 +216,13 @@ async function main() {
 
   let hasFailure = false;
 
-  for (const { name, payload } of TEST_CASES) {
+  for (const { name, _caseType, payload } of TEST_CASES) {
     const payloadWithWeek = { ...payload, week_range: weekRange };
     const text = formatWeeklyAhead(payloadWithWeek);
     const validation = validateWeeklyAhead(payloadWithWeek, text);
     const lines = text.split("\n").map((s) => s.trim()).filter(Boolean);
 
-    console.log("---", name);
+    console.log("---", _caseType ? `[${_caseType}]` : "", name);
     console.log("Строк:", lines.length, "(макс. 9)", lines.length <= 9 ? "✓" : "✗");
     console.log("Валидация:", validation.ok ? "ok" : validation.reason);
     if (!validation.ok) {
@@ -216,9 +238,9 @@ async function main() {
       try {
         const { statusCode, body } = await postWeeklyAhead(payloadWithWeek);
         if (statusCode >= 200 && statusCode < 300) {
-          console.log("[OK] POST →", statusCode, body.meta && body.meta.sent ? "отправлено в тестовый канал" : "");
+          console.log("[OK] POST →", statusCode, body.meta && body.meta.sent ? "отправлено в основной канал" : "");
         } else if (statusCode === 503) {
-          console.log("[!] 503 — задай TELEGRAM_TEST_CHANNEL_ID в окружении bridge и перезапусти bridge.");
+          console.log("[!] 503 — задай TELEGRAM_CHAT_ID в окружении bridge и перезапусти bridge.");
         } else if (statusCode === 500) {
           console.log("[!] 500 — ошибка отправки:", body.error || "");
           if (body.details) console.log("    details:", JSON.stringify(body.details));

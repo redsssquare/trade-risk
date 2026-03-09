@@ -1,14 +1,12 @@
 const {
   PRE_EVENT,
   DURING_EVENT,
-  POST_EVENT,
   GREEN,
   pickFromPool,
   applyPlaceholders,
   resolveCategory,
 } = require("./phrases");
-
-const PHASE_KEYS = { PRE_EVENT: "pre", DURING_EVENT: "dur", POST_EVENT: "post" };
+const { pluralRu } = require("../../../utils/pluralRu");
 
 const renderPhrase = (phasePool, phaseKey, category, payload, phraseOpts) => {
   const pool = phasePool[category];
@@ -33,16 +31,16 @@ const renderTelegramTextTemplate = (payload, opts) => {
   const category = resolveCategory(payload);
 
   if (phase === "pre_event") {
-    return renderPhrase(PRE_EVENT, "pre", category, payload, { appendCurrencies: true })
-      || `⏳ Через ${payload.minutes_to_event || 0} минут публикация важных экономических данных.`;
+    const fallback = (() => {
+      const min = Math.max(0, Math.ceil(Number(payload.minutes_to_event) || 0));
+      const minWord = pluralRu(min, "минуту", "минуты", "минут");
+      return `⏳ Через ${min} ${minWord} публикация важных экономических данных.`;
+    })();
+    return renderPhrase(PRE_EVENT, "pre", category, payload, { appendCurrencies: true }) || fallback;
   }
   if (phase === "during_event") {
     return renderPhrase(DURING_EVENT, "dur", category, payload)
-      || "🔴 Публикация данных.\nВ рынке идёт движение.";
-  }
-  if (phase === "post_event") {
-    return renderPhrase(POST_EVENT, "post", category, payload)
-      || "Первичная реакция завершена.\nДвижения постепенно снижаются.";
+      || "🔴 Публикация данных.\nИдёт реакция рынка.";
   }
 
   return renderPhrase(PRE_EVENT, "pre", category, payload)
