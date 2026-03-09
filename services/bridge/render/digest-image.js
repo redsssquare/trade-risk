@@ -7,6 +7,7 @@
 const fs = require("fs");
 const path = require("path");
 const { formatDateMsk, formatTimeMsk } = require("./digest-format");
+const { pluralRu } = require("../../../utils/pluralRu");
 
 const TEMPLATES_DIR = path.join(__dirname, "templates");
 
@@ -146,7 +147,7 @@ function buildDigestImageData(events, opts = {}) {
 
   const description = highCount === 1
     ? "Одно значимое событие"
-    : `Запланировано ${highCount} событий`;
+    : `Запланировано ${highCount} ${pluralRu(highCount, "значимое событие", "значимых события", "значимых событий")}`;
 
   return {
     date: moscowDateStr,
@@ -250,9 +251,11 @@ async function renderDigestImage(imageData, opts = {}) {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width, height: 1200, deviceScaleFactor: 2 });
+    // HTML is fully inlined (styles/icons as data URI), so waiting for network idle
+    // can cause flaky timeouts in containers with unstable networking.
     await page.setContent(html, {
-      waitUntil: "networkidle2",
-      timeout: 15000,
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
     });
 
     const contentHeight = await page.evaluate(() => {
@@ -262,6 +265,7 @@ async function renderDigestImage(imageData, opts = {}) {
 
     await page.setViewport({ width, height: Math.ceil(contentHeight), deviceScaleFactor: 2 });
 
+    await page.waitForSelector(".digest-wrapper", { timeout: 5000 });
     const wrapper = await page.$(".digest-wrapper");
     const buffer = wrapper
       ? await wrapper.screenshot({ type: "png" })

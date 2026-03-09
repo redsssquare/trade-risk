@@ -4,17 +4,6 @@
  * Время выводится без указания часового пояса.
  */
 
-const {
-  DIGEST_HEADER,
-  DIGEST_EMPTY_BODY,
-  DIGEST_EVENT_LINE,
-  DIGEST_ANCHOR_EVENT_LINE,
-  DIGEST_CLUSTER_EVENT_LINE,
-  DIGEST_CLUSTER_ANCHOR_EVENT_LINE,
-  DIGEST_NFP_CLUSTER_LINE,
-  DIGEST_CLOSING,
-} = require("./digest-phrases");
-
 const CURRENCY_TO_COUNTRY = {
   USD: "US", EUR: "EU", GBP: "GB", JPY: "JP", AUD: "AU",
   CAD: "CA", CHF: "CH", NZD: "NZ", CNY: "CN", SEK: "SE",
@@ -273,65 +262,21 @@ function formatDateMsk(moscowDateStr) {
 
 /**
  * Строит текст дайджеста по списку событий (уже отфильтрованных: сегодня, high, с is_anchor).
+ * Делегирует в generateDailyOverview — новый формат с окнами паузы.
  * @param {Array<{ date: string, title: string, country?: string, is_anchor?: boolean, anchor_label?: string }>} events
  * @param {{ moscowDateStr: string }} opts
  * @returns {string}
  */
 function formatDailyDigest(events, opts = {}) {
-  const moscowDateStr = opts.moscowDateStr || new Date().toLocaleString("en-CA", { timeZone: "Europe/Moscow" }).slice(0, 10);
-  const date = formatDateMsk(moscowDateStr);
-
-  if (!Array.isArray(events) || events.length === 0) {
-    const header = DIGEST_HEADER.replace("{date}", date);
-    const bodyVariant = pickFromPool(moscowDateStr, DIGEST_EMPTY_BODY);
-    const body = Array.isArray(bodyVariant) ? bodyVariant.join("\n") : String(bodyVariant || "");
-    return `${header}\n\n${body}`.trim();
-  }
-
-  const hasAnchor = events.some((e) => e.is_anchor === true);
-  const anchorEvent = hasAnchor ? events.find((e) => e.is_anchor) : null;
-  const anchorTime = anchorEvent && anchorEvent.date ? formatTimeMsk(anchorEvent.date) : null;
-
-  const lines = [];
-  const byTime = new Map();
-  for (const e of events) {
-    const t = e.date ? formatTimeMsk(e.date) : "??:??";
-    if (!byTime.has(t)) byTime.set(t, []);
-    byTime.get(t).push(e);
-  }
-
-  const sortedTimes = [...byTime.keys()].sort();
-
-  for (const t of sortedTimes) {
-    const group = byTime.get(t);
-    const title = translateTitle((group[0].title || "").trim()) || "Публикация данных";
-    const country = (group[0].country || "USD").trim().toUpperCase();
-    const geo = `${currencyToFlag(country)} ${country}`;
-
-    if (group.length > 1) {
-      const isAnchorCluster = hasAnchor && group.some((x) => x.is_anchor);
-      const isNfpCluster = isAnchorCluster && group.every((x) => {
-        const lbl = (x.anchor_label || "").toLowerCase();
-        return lbl === "nfp" || lbl === "non-farm payrolls";
-      });
-      const template = isNfpCluster ? DIGEST_NFP_CLUSTER_LINE : (isAnchorCluster ? DIGEST_CLUSTER_ANCHOR_EVENT_LINE : DIGEST_CLUSTER_EVENT_LINE);
-      const line = template.replace("{time}", t).replace("{count}", group.length).replace("{geo}", geo);
-      lines.push(line);
-    } else {
-      const template = group[0].is_anchor ? DIGEST_ANCHOR_EVENT_LINE : DIGEST_EVENT_LINE;
-      lines.push(template.replace("{time}", t).replace("{title}", title).replace("{geo}", geo));
-    }
-  }
-
-  const header = DIGEST_HEADER.replace("{date}", date);
-  const bodyLines = [header, "", ...lines];
-  bodyLines.push("", DIGEST_CLOSING);
-
-  return bodyLines.join("\n").trim();
+  const { generateDailyOverview } = require("./daily-overview");
+  return generateDailyOverview(events, opts);
 }
 
 module.exports = {
   formatDailyDigest,
   formatTimeMsk,
   formatDateMsk,
+  currencyToFlag,
+  translateTitle,
+  pickFromPool,
 };

@@ -3,13 +3,14 @@
  * Тестирование daily digest.
  *
  * DRY_RUN=1  — локальный прогон без отправки в Telegram (форматтер + проверки).
- * По умолчанию (без DRY_RUN) — отправка через bridge в TELEGRAM_TEST_CHANNEL_ID.
+ * По умолчанию (без DRY_RUN) — отправка через bridge в TELEGRAM_CHAT_ID (основной канал).
  *
  * Usage:
  *   DRY_RUN=1 node scripts/send-daily-digest-test-cases.js
  *   BRIDGE_URL=http://localhost:3000 node scripts/send-daily-digest-test-cases.js
  *   SELECT_CASES=1,2,5 node scripts/send-daily-digest-test-cases.js  — только кейсы 1, 2, 5
  *   SELECT_CASES=13,14,15,16 … — отправить в Telegram только: Спокойный, Умеренный, Насыщенный, 4 валюты (лимит 3)
+ *   SCENARIO_MODE=1 — быстрый режим из мастер-скрипта: кейсы 1, 2, 3, 5, 7 (пустой, несколько, anchor, кластер+anchor, одно событие)
  */
 
 const http = require("http");
@@ -20,11 +21,14 @@ const DRY_RUN = process.env.DRY_RUN === "1";
 const BRIDGE_URL = process.env.BRIDGE_URL || "http://localhost:3000";
 // SELECT_CASES=1,2,5 — отправить только кейсы с номерами 1, 2, 5 (1-based). Без переменной — все кейсы.
 const SELECT_CASES_RAW = process.env.SELECT_CASES || "";
+// SCENARIO_MODE=1 — режим быстрого запуска: только 5 типовых кейсов (1,2,3,5,7)
+const SCENARIO_MODE = process.env.SCENARIO_MODE === "1";
 
-// Список запрещённых слов (из server.js FORBIDDEN_TELEGRAM_WORDS)
+// Список запрещённых слов (из server.js FORBIDDEN_TELEGRAM_WORDS).
+// "режим" исключён — closing-фраза "В остальное время — рабочий режим." по спекам.
 const FORBIDDEN_WORDS = [
   "рекомендуем", "будьте", "следите", "критический",
-  "экстремальный", "паника", "режим", "уровень", "контроль"
+  "экстремальный", "паника", "уровень", "контроль"
 ];
 
 // Разрешённые эмодзи для дайджеста (из digest-phrases.js)
@@ -240,10 +244,10 @@ function runDryRun(moscowDateStr, payloads) {
       }
     }
 
-    // 3. Подсчёт строк (мягкий ориентир: не более 15 для дайджеста)
+    // 3. Подсчёт строк (мягкий ориентир: новый формат с паузами — до 30 строк)
     const lineCount = text.split("\n").length;
-    if (lineCount > 15) {
-      issues.push(`строк: ${lineCount} > 15`);
+    if (lineCount > 30) {
+      issues.push(`строк: ${lineCount} > 30`);
     }
 
     // 4. Наличие заголовка
@@ -251,8 +255,8 @@ function runDryRun(moscowDateStr, payloads) {
       issues.push("нет заголовка 📈 Обзор дня");
     }
 
-    // 5. Для непустых: наличие closing
-    if (withAnchor.length > 0 && !text.includes("Предупредим перед каждым окном")) {
+    // 5. Для непустых: наличие closing (новый формат)
+    if (withAnchor.length > 0 && !text.includes("В остальное время — рабочий режим.")) {
       issues.push("нет closing-фразы");
     }
 
@@ -342,8 +346,12 @@ async function runSend(payloads) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 function filterPayloadsBySelectCases(payloads) {
-  if (!SELECT_CASES_RAW.trim()) return payloads;
-  const indices = SELECT_CASES_RAW.split(",")
+  // SCENARIO_MODE=1 — быстрый режим: только ключевые кейсы по одному на тип
+  const effectiveSelectCases = SCENARIO_MODE && !SELECT_CASES_RAW.trim()
+    ? "1,2,3,5,7"
+    : SELECT_CASES_RAW;
+  if (!effectiveSelectCases.trim()) return payloads;
+  const indices = effectiveSelectCases.split(",")
     .map((s) => parseInt(s.trim(), 10))
     .filter((n) => Number.isFinite(n) && n >= 1);
   if (indices.length === 0) return payloads;
@@ -357,7 +365,8 @@ async function main() {
 
   console.log("[send-daily-digest-test-cases] Дата (MSK):", moscowDateStr);
   console.log("[send-daily-digest-test-cases] Режим:", DRY_RUN ? "DRY_RUN (локально, без отправки)" : "SEND (отправка в Telegram)");
-  console.log("[send-daily-digest-test-cases] Кейсов:", payloads.length, SELECT_CASES_RAW.trim() ? `(SELECT_CASES=${SELECT_CASES_RAW})` : "", "\n");
+  const modeLabel = SCENARIO_MODE ? "(SCENARIO_MODE=1)" : SELECT_CASES_RAW.trim() ? `(SELECT_CASES=${SELECT_CASES_RAW})` : "";
+  console.log("[send-daily-digest-test-cases] Кейсов:", payloads.length, modeLabel, "\n");
 
   if (DRY_RUN) {
     runDryRun(moscowDateStr, payloads);
