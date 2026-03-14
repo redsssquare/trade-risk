@@ -44,7 +44,7 @@ const HEARTBEAT_INTERVAL_MS = Number.isFinite(HEARTBEAT_INTERVAL_MS_RAW) && HEAR
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const SIMULATION_NOW = process.env.SIMULATION_NOW || "";
 const PRE_EVENT_WINDOW_MS = 15 * 60 * 1000;
-const DURING_EVENT_WINDOW_MS = 5 * 60 * 1000;
+const DURING_EVENT_WINDOW_MS = 15 * 60 * 1000;
 const FORBIDDEN_TELEGRAM_WORDS = [
   "рекомендуем",
   "будьте",
